@@ -36,7 +36,7 @@ Browser ──URI scheme──▶ Companion (native picker)
 
 CloudDrive Companion 是一个 Windows 桌面应用程序,用于辅助**网页端**进行大文件上传。它通过 URI Scheme 协议与浏览器通信:
 
-- 📁 **原生文件/文件夹选择** — 调用系统对话框,支持树形勾选与目录折叠
+- 📁 **自行实现的文件选择器** — 应用内文件列表浏览/勾选/筛选/全选,支持目录折叠;也可一键调起系统原生对话框
 - 📤 **分片上传** — 大文件并发分片,支持 GB 级文件与**断点续传**
 - 🔄 **实时进度** — 通过 SSE 把上传进度推回浏览器页面
 - 🖥️ **系统托盘** — 后台常驻,关闭窗口即最小化到托盘
@@ -54,7 +54,7 @@ CloudDrive Companion 是一个 Windows 桌面应用程序,用于辅助**网页�
 
 | 文件选择与上传 | 监控与诊断 |
 |:---:|:---:|
-| <img src="docs/screenshots/file-selector.png" width="380" alt="Native file selector with tree view and checkboxes"><br>**文件选择器** — 目录树 + 复选框多选 | <img src="docs/screenshots/http-log-viewer.png" width="380" alt="HTTP request log viewer"><br>**HTTP 请求日志** — 逐请求查看 headers/body |
+| <img src="docs/screenshots/file-selector.png" width="380" alt="Custom in-app file selector with file list and checkboxes"><br>**文件选择器(自行实现)** — 应用内文件浏览与勾选 | <img src="docs/screenshots/http-log-viewer.png" width="380" alt="HTTP request log viewer"><br>**HTTP 请求日志** — 逐请求查看 headers/body |
 | <img src="docs/screenshots/upload-progress.png" width="380" alt="Upload progress list with speed and status"><br>**上传进度** — 分片进度/速度/状态一览 | <img src="docs/screenshots/network-diagnostics.png" width="380" alt="Network diagnostics: connectivity, proxy, DNS"><br>**网络诊断** — 连通性/代理/DNS 测试 |
 | <img src="docs/screenshots/scan-progress-overlay.png" width="380" alt="Directory scan progress overlay"><br>**扫描进度浮层** — 海量文件遍历实时反馈 | <img src="docs/screenshots/tcp-connections.png" width="380" alt="TCP connections monitor"><br>**TCP 连接监控** — 含重试成功记录 |
 | <img src="docs/screenshots/task-trace-sequence.png" width="380" alt="Task tracing sequence diagram"><br>**任务时序追踪** — 浏览器/客户端/后端全链路 | <img src="docs/screenshots/port-usage.png" width="380" alt="Port usage viewer"><br>**端口占用** — 监听端口与占用进程 |
