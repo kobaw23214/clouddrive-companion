@@ -207,6 +207,20 @@ my-clouddrive://open-client?server=https://backend.example.com:8443
 
 MIT License
 
+## 📬 联系我 / Contact
+
+<div align="center">
+
+**微信扫码交流 / Scan to chat on WeChat**
+
+<a href="docs/contact/wechat-qrcode.jpg" target="_blank">
+  <img src="docs/contact/wechat-qrcode.jpg" width="200" alt="WeChat QR Code" title="点击查看大图" />
+</a>
+
+**邮箱 / Email**: [1477746214@qq.com](mailto:1477746214@qq.com)
+
+</div>
+
 ---
 
 <div align="center">
