@@ -1,0 +1,15 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "clouddrive-companion-withWails2",
+  "outputfilename": "clouddrive-companion",
+  "frontend:install": "npm install",
+  "frontend:build": "npm run build",
+  "frontend:dev:watcher": "npm run dev",
+  "frontend:dev:serverUrl": "auto",
+  "wailsjsdir": "./frontend",
+  "frontend:dir": "./frontend",
+  "author": {
+    "name": "kobaw23214",
+    "email": "287895701+kobaw23214@users.noreply.github.com"
+  }
+}

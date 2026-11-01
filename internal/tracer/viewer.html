@@ -1,0 +1,1454 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>任务级链路追踪 · CloudDrive Companion</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+      "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    background: #f8fafc; color: #0f172a;
+    height: 100vh; overflow: hidden;
+  }
+  #app { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+
+  .page-header {
+    padding: 14px 24px; background: #fff; border-bottom: 1px solid #e5e7eb;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04); display: flex; align-items: center;
+    gap: 16px; flex-shrink: 0; height: 56px;
+  }
+  .page-header h1 { font-size: 14px; font-weight: 600; color: #111827; }
+  .page-header .subtitle { color: #6b7280; font-size: 13px; }
+  .header-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+  .breadcrumb { display: inline-flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: wrap; }
+  .bc-sep { color: #cbd5e1; }
+  .bc-meta { color: #94a3b8; font-size: 12px; }
+  .bc-id {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    color: #111827; font-size: 12px;
+  }
+  .bc-text { color: #111827; font-size: 13px; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .back-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; border-radius: 6px;
+    border: 1px solid #e5e7eb; background: #fff; color: #475569; cursor: pointer;
+  }
+  .back-btn:hover { background: #f1f5f9; color: #111827; }
+
+  .btn {
+    padding: 6px 14px; font-size: 13px; background: #fff; color: #475569;
+    border: 1px solid #e5e7eb; border-radius: 8px; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .btn:hover { background: #f1f5f9; color: #111827; }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-primary { background: #2563eb; color: #fff; border-color: #2563eb; }
+  .btn-primary:hover { background: #1d4ed8; color: #fff; }
+  .btn-danger { color: #b91c1c; }
+  .btn-danger:hover { background: #fef2f2; }
+  .btn-link {
+    border: none; background: transparent; color: #2563eb; font-size: 12px;
+    cursor: pointer; padding: 4px 6px; border-radius: 4px;
+  }
+  .btn-link:hover:not(:disabled) { background: #eff6ff; }
+  .btn-link:disabled { color: #94a3b8; cursor: default; }
+
+  .content { flex: 1; min-height: 0; overflow-y: auto; padding: 16px 20px; }
+
+  .card {
+    background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden;
+    margin-bottom: 16px;
+  }
+  .card-header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 16px; border-bottom: 1px solid #e5e7eb;
+  }
+  .card-title { font-size: 13px; font-weight: 600; color: #111827; flex-shrink: 0; }
+  .card-meta { font-size: 12px; color: #94a3b8; flex: 1; }
+
+  .filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; padding: 12px 16px; }
+  .filter { display: flex; flex-direction: column; gap: 4px; min-width: 140px; }
+  .filter label { font-size: 11px; color: #94a3b8; }
+  .filter input, .filter select {
+    height: 32px; padding: 0 10px; font-size: 13px; border: 1px solid #e5e7eb;
+    border-radius: 8px; background: #fff; color: #0f172a; outline: none;
+  }
+  .filter input:focus, .filter select:focus { border-color: #2563eb; box-shadow: 0 0 0 3px #eff6ff; }
+
+  /* ── 列表 ── */
+  .meta-table { width: 100%; border-collapse: collapse; font-size: 13px; table-layout: fixed; }
+  .meta-table th {
+    text-align: left; padding: 10px 12px; background: #f9fafb;
+    color: #374151; border-bottom: 1px solid #e5e7eb; font-weight: 600;
+    position: sticky; top: 0; z-index: 1; font-size: 12px;
+  }
+  .meta-table td {
+    text-align: left; padding: 10px 12px; border-bottom: 1px solid #f3f4f6; color: #1f2937;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .meta-table tr:last-child td { border-bottom: none; }
+  .meta-table tr.row-click { cursor: pointer; }
+  .meta-table tr.row-click:hover td { background: #f0f9ff; }
+  .meta-table tr.row-hovered td { background: #eff6ff; }
+  .num { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+         font-variant-numeric: tabular-nums; }
+  .meta-table th.col-cb, .meta-table td.col-cb {
+    padding-left: 0; padding-right: 0; text-align: center; width: 40px;
+  }
+  .meta-table th.col-cb input, .meta-table td.col-cb input {
+    vertical-align: middle; cursor: pointer;
+  }
+  .col-num { text-align: right; }
+
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+  .dot-ok { background: #10b981; }
+  .dot-fail { background: #ef4444; }
+  .badge {
+    display: inline-block; padding: 2px 8px; border-radius: 8px;
+    font-size: 11px; font-weight: 500;
+  }
+  .badge-ok { color: #10b981; background: #ecfdf5; }
+  .badge-fail { color: #ef4444; background: #fef2f2; }
+  .badge-warn { color: #f59e0b; background: #fffbeb; }
+  .badge-upload { color: #4338ca; background: #eef2ff; }
+  .badge-scan { color: #0e7490; background: #ecfeff; }
+  .stage-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
+
+  .pagination {
+    display: flex; align-items: center; justify-content: center; gap: 12px;
+    padding: 16px; font-size: 13px; color: #475569;
+  }
+
+  .empty {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 12px; padding: 64px 16px; color: #94a3b8; font-size: 13px;
+  }
+  .skeleton {
+    background: linear-gradient(90deg, #f1f5f9 0%, #e2e8f0 50%, #f1f5f9 100%);
+    background-size: 200% 100%; animation: shim 1.4s linear infinite;
+    border-radius: 8px;
+  }
+  @keyframes shim { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
+
+  /* ── 设置面板 ── */
+  .settings { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; margin-bottom: 16px; }
+  .settings-summary {
+    display: flex; align-items: center; gap: 12px; padding: 12px 16px;
+    cursor: pointer; user-select: none;
+  }
+  .settings-row {
+    display: flex; align-items: center; gap: 16px; padding: 14px 16px;
+    border-top: 1px solid #e5e7eb;
+  }
+  .settings-row.disabled { opacity: 0.5; pointer-events: none; }
+  .settings-label { flex: 1; min-width: 0; }
+  .settings-label .l-title { font-size: 13px; font-weight: 500; color: #0f172a; }
+  .settings-label .l-meta  { font-size: 12px; color: #94a3b8; margin-top: 2px; }
+  .toggle {
+    position: relative; display: inline-block; width: 36px; height: 22px; flex-shrink: 0;
+  }
+  .toggle input { opacity: 0; width: 0; height: 0; }
+  .toggle-slider {
+    position: absolute; inset: 0; background: #cbd5e1; border-radius: 999px;
+    cursor: pointer; transition: background 80ms ease;
+  }
+  .toggle-slider::before {
+    content: ''; position: absolute; top: 2px; left: 2px;
+    width: 18px; height: 18px; background: #fff; border-radius: 50%;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.18);
+    transition: transform 200ms cubic-bezier(0.32, 0.72, 0, 1);
+  }
+  .toggle input:checked + .toggle-slider { background: #2563eb; }
+  .toggle input:checked + .toggle-slider::before { transform: translateX(14px); }
+
+  /* ── 甘特图容器 ── */
+  .chart-host {
+    background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden;
+    margin-bottom: 16px;
+  }
+  .chart-body { padding: 8px 12px; }
+
+  /* 全屏甘特图 */
+  .chart-host.fullscreen {
+    position: fixed; inset: 56px 0 0 0; z-index: 1050;
+    border-radius: 0; border-left: none; border-right: none;
+    margin-bottom: 0; display: flex; flex-direction: column;
+  }
+  .chart-host.fullscreen .chart-body { flex: 1; min-height: 0; }
+
+  #toast {
+    position: fixed; top: 16px; right: 24px; padding: 8px 14px;
+    border-radius: 8px; font-size: 12px; box-shadow: 0 8px 24px rgba(15,23,42,0.12);
+    z-index: 9999; animation: toastin 200ms ease;
+    background: #ecfdf5; color: #10b981;
+  }
+  #toast.toast-fail { background: #fef2f2; color: #ef4444; }
+  @keyframes toastin { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="page-header">
+    <div class="breadcrumb">
+      <button class="back-btn" id="backBtn" style="display:none" title="返回上一级">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="19" y1="12" x2="5" y2="12"></line>
+          <polyline points="12 19 5 12 12 5"></polyline>
+        </svg>
+      </button>
+      <h1>任务级链路追踪</h1>
+      <span id="bcContainer"></span>
+    </div>
+    <span class="subtitle" id="globalBadge"></span>
+    <div class="header-actions">
+      <button class="btn" id="refreshBtn">刷新</button>
+    </div>
+  </div>
+
+  <div class="content" id="content"></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+<script>
+// ============================================================
+// 任务级链路追踪查看器 ─ 浏览器版（独立单页）
+// 与 Wails 客户端的 trace/* 组件功能等价。
+// ============================================================
+
+// stage 元数据
+const STAGE_LABELS = {
+  file_scan: '目录扫描',
+  metadata_send: '发送文件列表',
+  upload_task: '上传任务',
+  upload_file: '文件上传',
+  md5_calc: 'MD5 计算',
+  check_chunks: '查询已传分片',
+  chunk_upload: '分片上传',
+  server_merge: '服务端合并',
+  notify_complete: '通知后端合并',
+  other: '其他',
+};
+const STAGE_COLORS = {
+  file_scan: '#38bdf8',
+  metadata_send: '#a78bfa',
+  upload_task: '#6366f1',
+  upload_file: '#8b5cf6',
+  md5_calc: '#f59e0b',
+  check_chunks: '#14b8a6',
+  chunk_upload: '#94a3b8',
+  server_merge: '#f97316',
+  notify_complete: '#ec4899',
+  other: '#cbd5e1',
+};
+function stageLabel(s) { return STAGE_LABELS[s] || s || '—'; }
+function stageColor(s) { return STAGE_COLORS[s] || STAGE_COLORS.other; }
+
+// 状态：导航栈 + 查询状态
+const state = {
+  stack: [{ type: 'list' }],
+  page: 1, size: 50,
+  filter: {
+    traceType: '',
+    taskId: '',
+    from: defaultFrom(),  // 默认 1 年前
+    to: defaultTo(),      // 默认当天 23:59:59
+  },
+  fullscreen: false,
+  selectedTraceIds: new Set(),
+};
+
+function toLocalDatetimeStr(d) {
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function defaultFrom() {
+  const d = new Date();
+  d.setFullYear(d.getFullYear() - 1);
+  d.setHours(0, 0, 0, 0);
+  return toLocalDatetimeStr(d);
+}
+
+function defaultTo() {
+  const d = new Date();
+  d.setHours(23, 59, 0, 0);
+  return toLocalDatetimeStr(d);
+}
+
+// 工具
+function $(id) { return document.getElementById(id); }
+function el(tag, attrs, children) {
+  const e = document.createElement(tag);
+  if (attrs) for (const k in attrs) {
+    if (k === 'class') e.className = attrs[k];
+    else if (k === 'on') for (const ev in attrs.on) e.addEventListener(ev, attrs.on[ev]);
+    else if (k === 'style' && typeof attrs[k] === 'object') Object.assign(e.style, attrs[k]);
+    else if (k === 'disabled' && !attrs[k]) {} // skip
+    else e[k] = attrs[k];
+  }
+  if (children != null) {
+    if (!Array.isArray(children)) children = [children];
+    children.forEach((c) => {
+      if (c == null) return;
+      if (typeof c === 'string' || typeof c === 'number') e.appendChild(document.createTextNode(String(c)));
+      else e.appendChild(c);
+    });
+  }
+  return e;
+}
+function pad(n) { return String(n).padStart(2, '0'); }
+function formatMs(ms) {
+  if (ms == null || ms < 0) return '—';
+  if (ms < 1000) return Math.round(ms) + ' ms';
+  if (ms < 60000) return (ms / 1000).toFixed(1) + ' s';
+  if (ms < 3600000) return (ms / 60000).toFixed(1) + ' min';
+  return (ms / 3600000).toFixed(1) + ' h';
+}
+function formatTimeShort(ms) {
+  if (!ms) return '—';
+  const d = new Date(ms);
+  return pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+}
+function formatTimeFull(ms) {
+  if (!ms) return '—';
+  const d = new Date(ms);
+  return pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + ' ' +
+         pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+}
+function shortId(id) { return !id ? '—' : (id.length > 12 ? id.slice(0, 8) + '…' + id.slice(-4) : id); }
+function escapeHtml(s) {
+  if (s == null) return '';
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+function parseLocalToMs(s) {
+  if (!s) return 0;
+  const ts = Date.parse(s);
+  return Number.isFinite(ts) ? ts : 0;
+}
+function showToast(msg, kind) {
+  const old = $('toast');
+  if (old) old.remove();
+  const t = el('div', { id: 'toast', class: kind === 'fail' ? 'toast-fail' : '' }, msg);
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 2400);
+}
+
+async function api(method, path, body) {
+  const opts = { method };
+  if (body != null) {
+    opts.headers = { 'Content-Type': 'application/json' };
+    opts.body = JSON.stringify(body);
+  }
+  const resp = await fetch(path, opts);
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => '');
+    throw new Error(`${resp.status} ${resp.statusText}: ${text}`);
+  }
+  const ct = resp.headers.get('Content-Type') || '';
+  if (ct.includes('application/json')) return resp.json();
+  return null;
+}
+
+// ─── 路由 ───
+function current() { return state.stack[state.stack.length - 1]; }
+function back() {
+  if (state.fullscreen) { state.fullscreen = false; render(); return; }
+  if (state.stack.length <= 1) return;
+  state.stack.pop();
+  render();
+}
+function enterTrace(item) {
+  state.stack.push({ type: 'top-spans', traceId: item.traceId, taskName: item.taskName || item.taskId || item.traceId });
+  render();
+}
+function enterSpan(span) {
+  state.stack.push({ type: 'children', spanId: span.spanId, filename: span.filename || stageLabel(span.stage) });
+  render();
+}
+
+$('backBtn').addEventListener('click', back);
+$('refreshBtn').addEventListener('click', render);
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') { e.preventDefault(); back(); }
+});
+
+function renderBreadcrumb() {
+  const c = $('bcContainer');
+  c.innerHTML = '';
+  for (let i = 1; i < state.stack.length; i++) {
+    const f = state.stack[i];
+    c.appendChild(el('span', { class: 'bc-sep' }, '/'));
+    if (f.type === 'top-spans') {
+      const wrap = el('span', { class: 'breadcrumb' }, [
+        el('span', { class: 'bc-meta' }, 'trace'),
+        el('span', { class: 'bc-id' }, shortId(f.traceId)),
+      ]);
+      c.appendChild(wrap);
+    } else if (f.type === 'children') {
+      const wrap = el('span', { class: 'breadcrumb' }, [
+        el('span', { class: 'bc-meta' }, 'span'),
+        el('span', { class: 'bc-text', title: f.filename || '' }, f.filename || '—'),
+      ]);
+      c.appendChild(wrap);
+    }
+  }
+}
+
+function render() {
+  $('backBtn').style.display = state.stack.length > 1 ? 'inline-flex' : 'none';
+  renderBreadcrumb();
+  switch (current().type) {
+    case 'top-spans': renderTopSpans(); break;
+    case 'children':  renderChildren(); break;
+    default: renderList();
+  }
+}
+
+// ─── 视图 1：任务列表 ───
+async function renderList() {
+  const root = $('content');
+  root.innerHTML = '';
+
+  root.appendChild(await renderSettingsPanel());
+
+  const filtersCard = el('div', { class: 'card' }, el('div', { class: 'filters' }, [
+    el('div', { class: 'filter' }, [
+      el('label', null, '类型'),
+      (function () {
+        const s = el('select');
+        [['', '全部'], ['upload', '文件上传'], ['scan', '目录扫描']].forEach(([v, t]) => {
+          const o = el('option', { value: v }, t);
+          if (v === state.filter.traceType) o.selected = true;
+          s.appendChild(o);
+        });
+        s.addEventListener('change', () => { state.filter.traceType = s.value; state.page = 1; renderList(); });
+        return s;
+      })(),
+    ]),
+    el('div', { class: 'filter' }, [
+      el('label', null, '任务 ID'),
+      (function () {
+        const i = el('input', { placeholder: '精确匹配，留空表示不筛选', value: state.filter.taskId || '' });
+        i.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') { state.filter.taskId = i.value.trim(); state.page = 1; renderList(); }
+        });
+        return i;
+      })(),
+    ]),
+    el('div', { class: 'filter' }, [
+      el('label', null, '开始'),
+      (function () {
+        const i = el('input', { type: 'datetime-local', value: state.filter.from || '' });
+        i.addEventListener('change', () => { state.filter.from = i.value; state.page = 1; renderList(); });
+        return i;
+      })(),
+    ]),
+    el('div', { class: 'filter' }, [
+      el('label', null, '结束'),
+      (function () {
+        const i = el('input', { type: 'datetime-local', value: state.filter.to || '' });
+        i.addEventListener('change', () => { state.filter.to = i.value; state.page = 1; renderList(); });
+        return i;
+      })(),
+    ]),
+    el('div', { class: 'filter', style: { flexDirection: 'row', alignItems: 'center', gap: '8px', marginLeft: 'auto' } }, [
+      el('button', { class: 'btn btn-primary', on: { click: () => { state.page = 1; renderList(); } } }, '查询'),
+      el('button', {
+        class: 'btn',
+        on: {
+          click: () => {
+            state.filter = {
+              traceType: '',
+              taskId: '',
+              from: defaultFrom(),
+              to: defaultTo()
+            };
+            state.page = 1; state.size = 50;
+            renderList();
+          },
+        },
+      }, '重置'),
+    ]),
+  ]));
+  root.appendChild(filtersCard);
+
+  const resultCard = el('div', { class: 'card' });
+  resultCard.appendChild(el('div', { class: 'card-header' }, [
+    el('span', { class: 'card-title' }, '追踪记录'),
+    el('span', { class: 'card-meta', id: 'listMeta' }, '加载中…'),
+  ]));
+
+  // 多选删除工具栏：选中至少 1 条时显示。
+  const bulkBar = el('div', {
+    id: 'bulkBar',
+    style: {
+      display: 'none', alignItems: 'center', gap: '16px',
+      padding: '10px 16px', background: '#eff6ff',
+      borderBottom: '1px solid #dbeafe',
+    },
+  }, [
+    el('span', { id: 'bulkBarMeta', style: { fontSize: '13px', fontWeight: '600', color: '#1d4ed8' } }, ''),
+    el('span', { style: { flex: 1 } }, ''),
+    el('button', {
+      id: 'bulkBarClear', class: 'btn',
+      style: { background: 'transparent', border: 'none', color: '#60a5fa', fontWeight: '500' },
+      on: { click: () => clearSelection() },
+    }, '取消选中'),
+    el('button', {
+      id: 'bulkBarDelete', class: 'btn btn-danger',
+      style: { background: '#ef4444', color: '#fff', border: 'none', fontWeight: '600', padding: '6px 16px' },
+      on: { click: () => onBulkDelete() },
+    }, '删除选中'),
+  ]);
+  resultCard.appendChild(bulkBar);
+
+  const tableHost = el('div');
+  resultCard.appendChild(tableHost);
+
+  const skel = el('div', { style: { padding: '16px' } });
+  for (let i = 0; i < 5; i++) {
+    skel.appendChild(el('div', { class: 'skeleton', style: { height: '40px', marginBottom: '6px' } }));
+  }
+  tableHost.appendChild(skel);
+  root.appendChild(resultCard);
+
+  let resp;
+  try {
+    const params = new URLSearchParams();
+    if (state.filter.traceType) params.set('traceType', state.filter.traceType);
+    if (state.filter.taskId) params.set('taskId', state.filter.taskId);
+    const fromMs = parseLocalToMs(state.filter.from);
+    const toMs = parseLocalToMs(state.filter.to);
+    if (fromMs) params.set('from', fromMs);
+    if (toMs) params.set('to', toMs);
+    params.set('page', state.page);
+    params.set('size', state.size);
+    resp = await api('GET', '/task-traces/list?' + params.toString());
+  } catch (e) {
+    tableHost.innerHTML = '';
+    tableHost.appendChild(el('div', { class: 'empty' }, '加载失败：' + e.message));
+    $('listMeta').textContent = '';
+    return;
+  }
+
+  const items = resp.items || [];
+  $('listMeta').textContent = '共 ' + (resp.total || 0) + ' 条';
+
+  tableHost.innerHTML = '';
+  if (!items.length) {
+    tableHost.appendChild(el('div', { class: 'empty' }, '暂无符合条件的追踪记录'));
+    return;
+  }
+
+  const tbl = el('table', { class: 'meta-table' });
+  tbl.appendChild(el('colgroup', null, [
+    el('col', { style: { width: '40px' } }),  // checkbox
+    el('col', { style: { width: '120px' } }), // 状态
+    el('col'),                                // 任务
+    el('col', { style: { width: '100px' } }),
+    el('col', { style: { width: '160px' } }),
+    el('col', { style: { width: '90px' } }),
+    el('col', { style: { width: '90px' } }),
+    el('col', { style: { width: '40px' } }),
+  ]));
+  const thead = el('thead');
+  // 表头全选：勾上则把当前页所有行加入 selection；取消则清掉本页这些 id
+  const headerCheckbox = el('input', {
+    type: 'checkbox', id: 'bulkHeaderCheckbox', title: '全选当前页',
+  });
+  headerCheckbox.addEventListener('click', (e) => e.stopPropagation());
+  headerCheckbox.addEventListener('change', () => {
+    if (headerCheckbox.checked) {
+      items.forEach((it) => state.selectedTraceIds.add(it.traceId));
+    } else {
+      items.forEach((it) => state.selectedTraceIds.delete(it.traceId));
+    }
+    syncSelectionUI();
+  });
+  thead.appendChild(el('tr', null, [
+    el('th', { class: 'col-cb' }, headerCheckbox),
+    el('th', null, '状态'),
+    el('th', null, '任务'),
+    el('th', null, '类型'),
+    el('th', null, '开始时间'),
+    el('th', { class: 'col-num' }, '耗时'),
+    el('th', { class: 'col-num' }, 'Span 数'),
+    el('th', null, ''),
+  ]));
+  tbl.appendChild(thead);
+  const tbody = el('tbody');
+  items.forEach((item) => {
+    // 行多选 checkbox：阻止冒泡，避免点选时触发整行的 enterTrace
+    const rowCheckbox = el('input', {
+      type: 'checkbox',
+      'data-trace-id': item.traceId,
+      checked: state.selectedTraceIds.has(item.traceId),
+    });
+    rowCheckbox.addEventListener('click', (e) => e.stopPropagation());
+    rowCheckbox.addEventListener('change', () => {
+      if (rowCheckbox.checked) state.selectedTraceIds.add(item.traceId);
+      else state.selectedTraceIds.delete(item.traceId);
+      syncSelectionUI();
+    });
+    const tr = el('tr', { class: 'row-click', on: { click: () => enterTrace(item) } }, [
+      el('td', { class: 'col-cb' }, rowCheckbox),
+      el('td', null, [
+        el('span', { class: 'dot ' + (item.hasFailure ? 'dot-fail' : 'dot-ok') }),
+        item.hasFailure ? '失败' : '成功',
+      ]),
+      el('td', null, [
+        el('div', { style: { fontWeight: '500' } }, item.taskName || item.taskId || '—'),
+        el('div', { class: 'num bc-meta', style: { fontSize: '11px' } },
+          shortId(item.traceId) + (item.runSeq > 1 ? ('  ·  #' + item.runSeq) : '')),
+      ]),
+      el('td', null, el('span', {
+        class: 'badge ' + (item.traceType === 'upload' ? 'badge-upload' : 'badge-scan'),
+      }, item.traceType === 'upload' ? '文件上传' : (item.traceType === 'scan' ? '目录扫描' : item.traceType))),
+      el('td', { class: 'num' }, formatTimeFull(item.startMs)),
+      el('td', { class: 'num col-num' }, formatMs(item.durationMs)),
+      el('td', { class: 'num col-num' }, String(item.spanCount || 0)),
+      el('td', { style: { textAlign: 'center', color: '#cbd5e1' } }, '›'),
+    ]);
+    tbody.appendChild(tr);
+  });
+  tbl.appendChild(tbody);
+  tableHost.appendChild(tbl);
+
+  // 列表渲染完毕同步一次工具栏（处理换页时本页若有部分预选项的情况）
+  syncSelectionUI();
+
+  const totalPages = Math.max(1, Math.ceil((resp.total || 0) / state.size));
+  resultCard.appendChild(el('div', { class: 'pagination' }, [
+    el('button', {
+      class: 'btn', disabled: state.page <= 1,
+      on: { click: () => { if (state.page > 1) { state.page--; renderList(); } } },
+    }, '‹ 上一页'),
+    el('span', null, '第 ' + state.page + ' / ' + totalPages + ' 页 · 共 ' + (resp.total || 0) + ' 条'),
+    el('button', {
+      class: 'btn', disabled: state.page >= totalPages,
+      on: { click: () => { if (state.page < totalPages) { state.page++; renderList(); } } },
+    }, '下一页 ›'),
+    (function () {
+      const s = el('select');
+      [20, 50, 100, 200].forEach((v) => {
+        const o = el('option', { value: v }, v + ' 条/页');
+        if (v === state.size) o.selected = true;
+        s.appendChild(o);
+      });
+      s.addEventListener('change', () => { state.size = Number(s.value); state.page = 1; renderList(); });
+      return s;
+    })(),
+  ]));
+}
+
+// ─── 视图 2、3 共用：通用的"甘特图卡片 + 完整字段表格"渲染 ───
+async function renderSpanList(opts) {
+  const { spans, parentWindow, hasChildrenMap, onEnterSpan, sectionTitle } = opts;
+  const root = $('content');
+
+  const chartCard = el('div', { class: 'chart-host', id: 'chartHost' });
+  if (state.fullscreen) chartCard.classList.add('fullscreen');
+
+  chartCard.appendChild(el('div', { class: 'card-header' }, [
+    el('span', { class: 'card-title' }, sectionTitle + '（' + spans.length + '）'),
+    el('span', { class: 'card-meta' }, '点击行高亮甘特条；右上角可全屏'),
+    el('button', {
+      class: 'btn',
+      on: { click: () => { state.fullscreen = !state.fullscreen; render(); } },
+    }, state.fullscreen ? '退出全屏' : '全屏'),
+  ]));
+  const chartBody = el('div', { class: 'chart-body' });
+  if (state.fullscreen) chartBody.style.flex = '1';
+  else chartBody.style.height = computeChartHeight(spans.length) + 'px';
+  chartCard.appendChild(chartBody);
+  root.appendChild(chartCard);
+
+  const chart = renderGantt(chartBody, spans, { parentWindow });
+
+  if (state.fullscreen) return; // 全屏模式不渲染表格
+
+  const listCard = el('div', { class: 'card' });
+  const tbl = el('table', { class: 'meta-table' });
+  tbl.appendChild(el('colgroup', null, [
+    el('col', { style: { width: '60px' } }),
+    el('col', { style: { width: '140px' } }),
+    el('col', { style: { width: '110px' } }),
+    el('col'),
+    el('col', { style: { width: '120px' } }),
+    el('col', { style: { width: '120px' } }),
+    el('col', { style: { width: '80px' } }),
+    el('col', { style: { width: '80px' } }),
+  ]));
+  tbl.appendChild(el('thead', null, el('tr', null, [
+    el('th', null, '状态'),
+    el('th', null, '阶段'),
+    el('th', null, 'Span ID'),
+    el('th', null, '详情 / 错误'),
+    el('th', null, '开始'),
+    el('th', null, '结束'),
+    el('th', { class: 'col-num' }, '耗时'),
+    el('th', null, '操作'),
+  ])));
+  const tbody = el('tbody');
+  spans.forEach((s, idx) => {
+    const tr = el('tr', {
+      class: 'row-click',
+      'data-span': s.spanId,
+      on: {
+        click: () => {
+          // 行点击仅高亮，不下钻
+          document.querySelectorAll('tr.row-hovered').forEach((r) => r.classList.remove('row-hovered'));
+          tr.classList.add('row-hovered');
+          chart.highlight(idx);
+        },
+        mouseenter: () => chart.highlight(idx),
+        mouseleave: () => chart.unhighlight(idx),
+      },
+    }, [
+      el('td', null, [
+        el('span', { class: 'dot ' + (s.success ? 'dot-ok' : 'dot-fail') }),
+        s.success ? '成功' : '失败',
+      ]),
+      el('td', null, [
+        el('span', { class: 'stage-swatch', style: { background: stageColor(s.stage) } }),
+        stageLabel(s.stage),
+      ]),
+      el('td', { class: 'num', title: s.spanId || '' }, shortId(s.spanId)),
+      el('td', { title: rowInfoTooltip(s) }, renderInfoCell(s)),
+      el('td', { class: 'num' }, formatTimeFull(s.startMs)),
+      el('td', { class: 'num' }, s.endMs ? formatTimeFull(s.endMs) : '进行中'),
+      el('td', { class: 'num col-num' }, formatMs(s.durationMs)),
+      el('td', null, (function () {
+        const can = hasChildrenMap ? !!hasChildrenMap[s.spanId] : true;
+        const btn = el('button', {
+          class: 'btn-link',
+          disabled: !can,
+          on: {
+            click: (e) => {
+              e.stopPropagation();
+              if (can && onEnterSpan) onEnterSpan(s);
+            },
+          },
+        }, can ? '深入 ›' : '—');
+        return btn;
+      })()),
+    ]);
+    tbody.appendChild(tr);
+  });
+  tbl.appendChild(tbody);
+  listCard.appendChild(tbl);
+  root.appendChild(listCard);
+
+  // 甘特图条点击：有子就下钻，没子就只高亮
+  chart.onClick = (s) => {
+    if (hasChildrenMap && !hasChildrenMap[s.spanId]) return;
+    if (onEnterSpan) onEnterSpan(s);
+  };
+  chart.onHover = (s) => {
+    document.querySelectorAll('tr.row-hovered').forEach((r) => r.classList.remove('row-hovered'));
+    if (s) {
+      const row = document.querySelector('tr[data-span="' + CSS.escape(s.spanId) + '"]');
+      if (row) row.classList.add('row-hovered');
+    }
+  };
+}
+
+function computeChartHeight(rows) {
+  // 固定可视高度，行多时由 ECharts 内部 Y 轴 dataZoom 滚动
+  return Math.max(320, Math.floor(window.innerHeight * 0.6));
+}
+
+function renderInfoCell(s) {
+  if (s.errorMessage) {
+    return el('span', { style: { color: '#ef4444' } }, s.errorMessage);
+  }
+  if (s.filename) {
+    const wrap = el('span', null, s.filename);
+    if (s.extra) {
+      wrap.appendChild(el('span', { style: { color: '#94a3b8' } }, ' · ' + s.extra));
+    }
+    return wrap;
+  }
+  if (s.extra) return el('span', null, s.extra);
+  return el('span', { style: { color: '#94a3b8' } }, '—');
+}
+
+function rowInfoTooltip(s) {
+  const parts = [];
+  if (s.errorMessage) parts.push(s.errorMessage);
+  if (s.filename) parts.push(s.filename);
+  if (s.extra) parts.push(s.extra);
+  return parts.join('\n');
+}
+
+// ─── 视图 2：顶层 span ───
+async function renderTopSpans() {
+  const f = current();
+  const root = $('content');
+  root.innerHTML = '';
+
+  if (!state.fullscreen) {
+    const summary = el('div', { style: { display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '16px' } }, [
+      el('div', { style: { flex: 1 } }, [
+        el('div', { class: 'card-title' }, f.taskName || f.traceId),
+        el('div', { class: 'card-meta num' }, shortId(f.traceId)),
+      ]),
+      el('button', { class: 'btn btn-danger', on: { click: () => onDeleteTrace(f.traceId) } }, '删除该 trace'),
+    ]);
+    root.appendChild(summary);
+  }
+
+  let spans;
+  try {
+    spans = await api('GET', '/task-traces/' + encodeURIComponent(f.traceId) + '/top-spans') || [];
+  } catch (e) {
+    root.appendChild(el('div', { class: 'empty' }, '加载失败：' + e.message));
+    return;
+  }
+  if (!spans.length) {
+    root.appendChild(el('div', { class: 'empty' }, '该 trace 暂无顶层 span'));
+    return;
+  }
+
+  // 顶层 span 一定可下钻
+  const hasChildrenMap = {};
+  spans.forEach((s) => { hasChildrenMap[s.spanId] = true; });
+
+  await renderSpanList({
+    spans,
+    parentWindow: null,
+    hasChildrenMap,
+    sectionTitle: '顶层 span',
+    onEnterSpan: enterSpan,
+  });
+}
+
+async function onDeleteTrace(traceId) {
+  if (!confirm('确认删除该 trace 的全部 span 数据？此操作不可恢复。')) return;
+  try {
+    await api('DELETE', '/task-traces/' + encodeURIComponent(traceId));
+    showToast('已删除');
+    back();
+  } catch (e) {
+    showToast('删除失败：' + e.message, 'fail');
+  }
+}
+
+// ─── 列表多选删除 ───
+//
+// 工具栏（#bulkBar）默认隐藏，selection 非空时显示。
+// 表头 checkbox 是"全选当前页"的便捷开关；选中状态由 syncSelectionUI() 推导：
+//   - 当前页全部行已勾选 → checked=true, indeterminate=false
+//   - 部分勾选            → checked=false, indeterminate=true
+//   - 全未勾选            → checked=false, indeterminate=false
+function syncSelectionUI() {
+  const bar = $('bulkBar');
+  const meta = $('bulkBarMeta');
+  const head = $('bulkHeaderCheckbox');
+  if (!bar) return;
+  const n = state.selectedTraceIds.size;
+  bar.style.display = n > 0 ? 'flex' : 'none';
+  if (meta) meta.textContent = n > 0 ? ('已选中 ' + n + ' 条') : '';
+  if (head) {
+    // 推断当前页有多少行被选中
+    const rowBoxes = document.querySelectorAll('input[type=checkbox][data-trace-id]');
+    let checkedRows = 0;
+    rowBoxes.forEach((cb) => {
+      const id = cb.getAttribute('data-trace-id');
+      const sel = state.selectedTraceIds.has(id);
+      cb.checked = sel;
+      if (sel) checkedRows++;
+    });
+    head.checked = rowBoxes.length > 0 && checkedRows === rowBoxes.length;
+    head.indeterminate = checkedRows > 0 && checkedRows < rowBoxes.length;
+  }
+}
+
+function clearSelection() {
+  state.selectedTraceIds.clear();
+  syncSelectionUI();
+}
+
+async function onBulkDelete() {
+  const ids = Array.from(state.selectedTraceIds);
+  if (!ids.length) return;
+  if (!confirm('确认删除这 ' + ids.length + ' 条 trace 的全部 span 数据？此操作不可恢复。')) return;
+
+  // 后端没有批量删除接口，前端用并发上限 = 8 的简易池逐条 DELETE。
+  // 失败的累计起来一次性提示，已成功的从 selection 中移除。
+  const deleteBtn = $('bulkBarDelete');
+  if (deleteBtn) { deleteBtn.disabled = true; deleteBtn.textContent = '删除中…'; }
+
+  let okCount = 0;
+  const failures = [];
+  const concurrency = 8;
+  let cursor = 0;
+
+  async function worker() {
+    while (cursor < ids.length) {
+      const i = cursor++;
+      const id = ids[i];
+      try {
+        await api('DELETE', '/task-traces/' + encodeURIComponent(id));
+        state.selectedTraceIds.delete(id);
+        okCount++;
+      } catch (e) {
+        failures.push({ id, msg: e && e.message ? e.message : String(e) });
+      }
+    }
+  }
+  const workers = [];
+  for (let i = 0; i < Math.min(concurrency, ids.length); i++) workers.push(worker());
+  await Promise.all(workers);
+
+  if (deleteBtn) { deleteBtn.disabled = false; deleteBtn.textContent = '删除选中'; }
+
+  if (failures.length === 0) {
+    showToast('已删除 ' + okCount + ' 条');
+  } else if (okCount === 0) {
+    showToast('全部失败：' + failures[0].msg, 'fail');
+  } else {
+    showToast('已删 ' + okCount + ' 条，失败 ' + failures.length + ' 条', 'warn');
+  }
+  // 重新拉一次列表（页号若全删空了会自动落到上一页由后端规整）
+  renderList();
+}
+
+// ─── 视图 3：子 span（支持递归下钻）───
+async function renderChildren() {
+  const f = current();
+  const root = $('content');
+  root.innerHTML = '';
+
+  if (!state.fullscreen) {
+    const summary = el('div', { style: { marginBottom: '16px' } }, [
+      el('div', { class: 'card-title' }, f.filename || '子阶段明细'),
+    ]);
+    root.appendChild(summary);
+  }
+
+  let kids;
+  try {
+    kids = await api('GET', '/task-traces/span/' + encodeURIComponent(f.spanId) + '/children') || [];
+  } catch (e) {
+    root.appendChild(el('div', { class: 'empty' }, '加载失败：' + e.message));
+    return;
+  }
+  if (!kids.length) {
+    root.appendChild(el('div', { class: 'empty' }, '该 span 没有子 span（已是最细粒度）'));
+    return;
+  }
+
+  // 父时间窗：从子 span 反推
+  let pwStart = Infinity, pwEnd = 0;
+  kids.forEach((k) => {
+    if (Number.isFinite(k.startMs)) pwStart = Math.min(pwStart, k.startMs);
+    if (Number.isFinite(k.endMs) && k.endMs > 0) pwEnd = Math.max(pwEnd, k.endMs);
+  });
+  const parentWindow = Number.isFinite(pwStart) ? { startMs: pwStart, endMs: pwEnd } : null;
+
+  // 用 stage 启发式判断哪些子还可下钻（叶子节点不查询）
+  // 注：file_scan 改为分层 span（每个目录一条），不再视作叶子
+  const LEAF_STAGES = new Set(['md5_calc', 'check_chunks', 'chunk_upload', 'notify_complete', 'server_merge']);
+  const hasChildrenMap = {};
+  kids.forEach((k) => { hasChildrenMap[k.spanId] = !LEAF_STAGES.has(k.stage); });
+
+  await renderSpanList({
+    spans: kids,
+    parentWindow,
+    hasChildrenMap,
+    sectionTitle: '子阶段',
+    onEnterSpan: enterSpan,
+  });
+}
+
+// ─── 甘特图（智能 Y 轴标签 + 描边 + 全屏适配）───
+function renderGantt(host, spans, opts) {
+  const { parentWindow = null } = opts || {};
+  const chart = echarts.init(host, null, { renderer: 'canvas' });
+
+  // 智能标签
+  const stages = new Set();
+  const filenames = new Set();
+  spans.forEach((s) => { stages.add(s.stage || ''); filenames.add(s.filename || ''); });
+  const singleStage = stages.size === 1;
+  const singleFile = filenames.size === 1;
+
+  function readChunkNumber(span) {
+    if (!span || !span.extra) return 0;
+    try {
+      const obj = JSON.parse(span.extra);
+      if (obj && Number.isFinite(obj.chunkNumber)) return obj.chunkNumber;
+    } catch {}
+    return 0;
+  }
+
+  function labelOf(span) {
+    // 任何 chunk_upload 行都带上分片号（混合视图也不只显示"分片"）
+    if (span.stage === 'chunk_upload') {
+      const n = readChunkNumber(span);
+      return n > 0 ? '分片 #' + n : stageLabel(span.stage);
+    }
+    // server_merge 也带分片号
+    if (span.stage === 'server_merge') {
+      const n = readChunkNumber(span);
+      return n > 0 ? '服务端合并 #' + n : stageLabel(span.stage);
+    }
+    if (singleStage && !singleFile) return span.filename || stageLabel(span.stage);
+    if (singleFile && !singleStage) return stageLabel(span.stage);
+    if (span.filename) return span.filename + ' / ' + stageLabel(span.stage);
+    return stageLabel(span.stage);
+  }
+
+  const labels = spans.map(labelOf);
+  const maxLen = labels.reduce((m, t) => Math.max(m, t.length), 0);
+  const labelWidth = Math.min(280, Math.max(140, maxLen * 8 + 24));
+  const labelInner = labelWidth - 24;
+
+  // ─── 标签宽度估算（CJK ≈ 12px，ASCII ≈ 7px @ 12px font-size） ───
+  function isCjk(ch) {
+    const code = ch.charCodeAt(0);
+    return (code >= 0x4e00 && code <= 0x9fff) ||
+           (code >= 0x3000 && code <= 0x30ff) ||
+           (code >= 0xff00 && code <= 0xffef);
+  }
+  function textPxWidth(text) {
+    let w = 0;
+    for (const ch of text || '') w += isCjk(ch) ? 12 : 7;
+    return w;
+  }
+  /** 左截断：保留尾部，前缀加 "…" */
+  function truncateLeft(text, maxPx) {
+    if (!text) return '';
+    if (textPxWidth(text) <= maxPx) return text;
+    let acc = 8; // ellipsis 宽度
+    let out = '';
+    for (let i = text.length - 1; i >= 0; i--) {
+      const ch = text[i];
+      const w = isCjk(ch) ? 12 : 7;
+      if (acc + w > maxPx) break;
+      acc += w;
+      out = ch + out;
+    }
+    return '…' + out;
+  }
+
+  const ts = [];
+  spans.forEach((s) => {
+    if (Number.isFinite(s.startMs)) ts.push(s.startMs);
+    if (Number.isFinite(s.endMs) && s.endMs > 0) ts.push(s.endMs);
+  });
+  if (parentWindow) {
+    ts.push(parentWindow.startMs);
+    if (parentWindow.endMs > 0) ts.push(parentWindow.endMs);
+  }
+  const now = Date.now();
+  if (!ts.length) ts.push(now);
+  const minTs = Math.min(...ts);
+  const maxTs = Math.max(...ts) || now;
+  const padX = Math.max(1, (maxTs - minTs) * 0.05);
+
+  const data = spans.map((s, i) => {
+    const inProgress = !s.endMs || s.endMs <= 0;
+    const start = s.startMs;
+    const end = inProgress ? now : Math.max(start, s.endMs);
+    return {
+      name: s.spanId,
+      value: [i, start, end, s.durationMs, s.stage, labels[i], s.spanId, s.success === false ? 0 : 1, inProgress ? 1 : 0],
+      span: s,
+    };
+  });
+
+  const markAreaData = parentWindow ? [[
+    { xAxis: parentWindow.startMs, itemStyle: { color: '#f1f5f9', opacity: 0.6 } },
+    { xAxis: parentWindow.endMs > 0 ? parentWindow.endMs : now },
+  ]] : [];
+
+  // ─── 默认 Y 轴 dataZoom 可视行数（按容器实际高度估算） ───
+  const ROW_HEIGHT = 32;
+  const totalRows = spans.length;
+  const containerH = (host && host.clientHeight) || Math.max(320, Math.floor(window.innerHeight * 0.6));
+  const availH = Math.max(120, containerH - 86); // grid top 40 + bottom 28 + 一些空隙
+  const visibleRows = Math.max(1, Math.floor(availH / ROW_HEIGHT));
+  const yEndPct = totalRows > visibleRows
+    ? ((Math.min(totalRows - 1, visibleRows - 1)) / Math.max(1, totalRows - 1)) * 100
+    : 100;
+
+  chart.setOption({
+    backgroundColor: 'transparent',
+    animation: false,
+    grid: { top: 40, bottom: 28, left: labelWidth, right: 24 },
+    xAxis: {
+      type: 'value', min: minTs - padX, max: maxTs + padX,
+      axisLine: { lineStyle: { color: '#e5e7eb' } },
+      axisTick: { show: false },
+      axisLabel: {
+        color: '#94a3b8', fontSize: 11,
+        fontFamily: 'ui-monospace, Menlo, Consolas, monospace',
+        formatter: (v) => formatTimeShort(v),
+        hideOverlap: true,
+      },
+      splitLine: { lineStyle: { color: '#e5e7eb', type: 'dashed' } },
+    },
+    yAxis: {
+      type: 'category', data: labels, inverse: true,
+      triggerEvent: true,
+      axisLine: { show: false }, axisTick: { show: false },
+      axisLabel: {
+        color: '#475569', fontSize: 12,
+        formatter: (val) => truncateLeft(String(val), labelInner),
+      },
+      splitLine: { show: false },
+    },
+    tooltip: {
+      trigger: 'item', confine: true,
+      backgroundColor: '#fff', borderColor: '#e5e7eb', borderWidth: 1, padding: [10, 14],
+      extraCssText: 'border-radius:10px; box-shadow:0 8px 24px rgba(15,23,42,0.08);',
+      textStyle: { color: '#0f172a', fontSize: 12 },
+      formatter: (p) => {
+        const s = p.data && p.data.span; if (!s) return '';
+        const ok = s.success !== false;
+        let out = '<div style="display:flex;align-items:center;gap:6px;font-weight:600;font-size:13px;">' +
+          '<span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:' + stageColor(s.stage) + ';"></span>' +
+          escapeHtml(stageLabel(s.stage)) + '</div>';
+        if (s.filename) out += '<div style="margin-top:4px;color:#475569;font-size:11px;">' + escapeHtml(s.filename) + '</div>';
+        out += '<div style="margin-top:4px;color:#475569;font-size:11px;">' +
+          formatTimeShort(s.startMs) + ' → ' + formatTimeShort(s.endMs || now) + ' · ' +
+          '<strong style="color:#0f172a;">' + formatMs(s.durationMs) + '</strong></div>';
+        out += '<div style="margin-top:4px;font-size:11px;">' +
+          (ok ? '<span style="color:#10b981;">● 成功</span>' : '<span style="color:#ef4444;">● 失败</span>') + '</div>';
+        if (s.extra) out += '<div style="margin-top:4px;color:#94a3b8;font-size:11px;max-width:280px;word-break:break-all;">' + escapeHtml(s.extra) + '</div>';
+        if (s.errorMessage) out += '<div style="margin-top:6px;color:#ef4444;font-size:11px;max-width:280px;word-break:break-all;">' + escapeHtml(s.errorMessage) + '</div>';
+        return out;
+      },
+    },
+    dataZoom: [
+      // X 轴顶部 slider —— 始终可见
+      {
+        type: 'slider', xAxisIndex: 0, height: 6, top: 18,
+        borderColor: 'transparent', backgroundColor: '#f1f5f9',
+        fillerColor: 'rgba(37,99,235,0.12)',
+        handleStyle: { color: '#2563eb', borderColor: '#2563eb' },
+        moveHandleSize: 4,
+        showDetail: false,
+        labelFormatter: (v) => formatTimeShort(v),
+        textStyle: { color: '#94a3b8', fontSize: 10 },
+      },
+      // X 轴 inside —— 按住 Ctrl + 滚轮缩放 X；不按 Ctrl 时不响应滚轮
+      {
+        type: 'inside', xAxisIndex: 0, filterMode: 'none',
+        zoomOnMouseWheel: 'ctrl', moveOnMouseWheel: false, moveOnMouseMove: false,
+      },
+      // Y 轴 inside —— 普通滚轮上下平移；Ctrl 让位给 X
+      {
+        type: 'inside', yAxisIndex: 0, filterMode: 'none',
+        zoomOnMouseWheel: false, moveOnMouseWheel: true,
+        start: 0, end: yEndPct,
+      },
+      // Y 轴右侧 slider —— 垂直滚动条视觉
+      {
+        type: 'slider', yAxisIndex: 0, right: 4, top: 40, bottom: 28, width: 8,
+        showDetail: false, showDataShadow: false,
+        backgroundColor: '#f1f5f9',
+        fillerColor: 'rgba(37,99,235,0.18)',
+        borderColor: 'transparent',
+        handleStyle: { color: '#2563eb', borderColor: '#2563eb' },
+        start: 0, end: yEndPct,
+      },
+    ],
+    series: [{
+      type: 'custom',
+      renderItem: (_p, api) => {
+        const yIdx = api.value(0);
+        const startMs = api.value(1), endMs = api.value(2);
+        const stage = api.value(4);
+        const success = api.value(7) !== 0;
+        const inProgress = api.value(8) === 1;
+        const sx = api.coord([startMs, yIdx])[0];
+        const ex = api.coord([endMs, yIdx])[0];
+        const cy = api.coord([startMs, yIdx])[1];
+        const fill = stageColor(stage);
+        const w = Math.max(ex - sx, 3);
+        // 条形高度跟随 y band 自适应：相邻条之间留 2px 缝
+        const band = (api.size && api.size([0, 1])[1]) || 24;
+        const barH = Math.max(6, Math.min(22, Math.floor(band - 2)));
+        const halfH = Math.floor(barH / 2);
+        // 描边：失败 1.5px 红色；正常 0.8px 半透明黑（避免一坨）
+        const stroke = !success ? '#ef4444' : 'rgba(15,23,42,0.18)';
+        const lineWidth = !success ? 1.5 : 0.8;
+        const baseStyle = { fill, stroke, lineWidth, cursor: 'pointer' };
+        if (inProgress) {
+          return {
+            type: 'group',
+            children: [
+              { type: 'rect', shape: { x: sx, y: cy - halfH, width: w, height: barH, r: 4 }, style: baseStyle },
+              { type: 'rect', shape: { x: sx, y: cy - halfH, width: w, height: barH, r: 4 },
+                style: { fill: 'rgba(255,255,255,0.35)' },
+                keyframeAnimation: {
+                  duration: 1400, loop: true,
+                  keyframes: [
+                    { percent: 0, easing: 'sinusoidalInOut', style: { opacity: 0.05 } },
+                    { percent: 0.5, easing: 'sinusoidalInOut', style: { opacity: 0.4 } },
+                    { percent: 1, easing: 'sinusoidalInOut', style: { opacity: 0.05 } },
+                  ],
+                },
+              },
+            ],
+          };
+        }
+        return {
+          type: 'rect', shape: { x: sx, y: cy - halfH, width: w, height: barH, r: 4 },
+          style: baseStyle,
+          emphasis: {
+            style: { shadowBlur: 8, shadowColor: 'rgba(15,23,42,0.25)', stroke, lineWidth: !success ? 2 : 1.2 },
+          },
+        };
+      },
+      encode: { x: [1, 2], y: 0 },
+      data,
+      markArea: markAreaData.length ? { silent: true, data: markAreaData } : undefined,
+    }],
+  });
+
+  // ─── 顶部时间信息条（常驻 [起始 — 持续 — 结束]） ───
+  const infoBar = document.createElement('div');
+  infoBar.style.cssText =
+    'position:absolute;top:0;left:16px;right:16px;height:16px;display:flex;' +
+    'align-items:center;justify-content:space-between;font-size:11px;pointer-events:none;z-index:2;';
+  const infoLeft = document.createElement('span');
+  const infoMid = document.createElement('span');
+  const infoRight = document.createElement('span');
+  infoLeft.style.cssText = 'color:#475569;font-family:ui-monospace,Menlo,Consolas,monospace;';
+  infoRight.style.cssText = infoLeft.style.cssText;
+  infoMid.style.cssText = 'color:#94a3b8;';
+  infoBar.appendChild(infoLeft); infoBar.appendChild(infoMid); infoBar.appendChild(infoRight);
+  if (host && getComputedStyle(host).position === 'static') host.style.position = 'relative';
+  if (host) host.appendChild(infoBar);
+
+  function updateInfoBar() {
+    const opt = chart.getOption();
+    const xz = (opt.dataZoom || []).find((z) => z && (z.xAxisIndex === 0 || (Array.isArray(z.xAxisIndex) && z.xAxisIndex.indexOf(0) !== -1)));
+    const sp = xz ? (xz.start ?? 0) : 0;
+    const ep = xz ? (xz.end ?? 100) : 100;
+    const min = (minTs - padX);
+    const max = (maxTs + padX);
+    const total = max - min;
+    const sMs = min + (total * sp) / 100;
+    const eMs = min + (total * ep) / 100;
+    infoLeft.textContent = formatTimeShort(sMs);
+    infoRight.textContent = formatTimeShort(eMs);
+    infoMid.textContent = formatMs(eMs - sMs);
+  }
+  updateInfoBar();
+  chart.on('dataZoom', updateInfoBar);
+
+  // ─── Y 轴标签 hover 浮层（显示完整名称） ───
+  const labelTip = document.createElement('div');
+  labelTip.style.cssText =
+    'position:absolute;display:none;background:#fff;color:#0f172a;border:1px solid #e5e7eb;' +
+    'border-radius:6px;padding:4px 8px;font-size:12px;max-width:480px;word-break:break-all;' +
+    'pointer-events:none;box-shadow:0 6px 18px rgba(15,23,42,0.08);z-index:10;';
+  if (host) host.appendChild(labelTip);
+
+  const wrapper = {
+    onClick: null, onHover: null,
+    highlight: (idx) => chart.dispatchAction({ type: 'highlight', seriesIndex: 0, dataIndex: idx }),
+    unhighlight: (idx) => chart.dispatchAction({ type: 'downplay', seriesIndex: 0, dataIndex: idx }),
+  };
+
+  chart.on('click', (p) => {
+    const s = p.data && p.data.span;
+    if (s && wrapper.onClick) wrapper.onClick(s);
+  });
+  chart.on('mouseover', (p) => {
+    if (p.componentType === 'series') {
+      const s = p.data && p.data.span;
+      if (s && wrapper.onHover) wrapper.onHover(s);
+      return;
+    }
+    if (p.componentType === 'yAxis' && p.targetType === 'axisLabel') {
+      const fullText = String(p.value || '');
+      if (textPxWidth(fullText) <= labelInner) return;
+      const hostRect = host.getBoundingClientRect();
+      const px = (p.event && p.event.event && p.event.event.clientX) || 0;
+      const py = (p.event && p.event.event && p.event.event.clientY) || 0;
+      labelTip.textContent = fullText;
+      labelTip.style.left = Math.max(8, px - hostRect.left + 12) + 'px';
+      labelTip.style.top = Math.max(8, py - hostRect.top + 12) + 'px';
+      labelTip.style.display = 'block';
+    }
+  });
+  chart.on('mouseout', (p) => {
+    if (!p || p.componentType === 'series') {
+      if (wrapper.onHover) wrapper.onHover(null);
+      return;
+    }
+    if (p.componentType === 'yAxis') {
+      labelTip.style.display = 'none';
+    }
+  });
+
+  if (typeof ResizeObserver !== 'undefined') {
+    const ro = new ResizeObserver(() => chart.resize());
+    ro.observe(host);
+  }
+  window.addEventListener('resize', () => chart.resize());
+
+  return wrapper;
+}
+
+// ─── 设置面板 ───
+async function renderSettingsPanel() {
+  const wrap = el('details', { class: 'settings' });
+  const summary = el('summary', { class: 'settings-summary' }, [
+    el('span', { class: 'card-title' }, '采集设置'),
+    el('span', { class: 'card-meta', id: 'settingsMeta' }, '加载中…'),
+  ]);
+  wrap.appendChild(summary);
+
+  let modulesResp = null, cfg = null;
+  try {
+    [modulesResp, cfg] = await Promise.all([
+      api('GET', '/task-traces/modules'),
+      api('GET', '/task-traces/config'),
+    ]);
+  } catch (e) {
+    summary.querySelector('#settingsMeta').textContent = '加载失败：' + e.message;
+    return wrap;
+  }
+
+  const enabledCount = (modulesResp.modules || []).filter((m) => m.enabled).length;
+  if (!modulesResp.global) {
+    summary.querySelector('#settingsMeta').innerHTML = '<span class="badge badge-warn">全局已暂停</span>';
+    $('globalBadge').innerHTML = '<span class="badge badge-warn">采集已暂停</span>';
+  } else {
+    summary.querySelector('#settingsMeta').textContent = enabledCount + ' / ' + (modulesResp.modules || []).length + ' 模块开启';
+    $('globalBadge').innerHTML = '';
+  }
+
+  wrap.appendChild(buildToggleRow({
+    title: '全局采集', meta: '关闭后所有追踪写入暂停',
+    checked: modulesResp.global,
+    onChange: async (v) => {
+      try { await api('PATCH', '/task-traces/global?enabled=' + v); showToast('已' + (v ? '开启' : '关闭')); }
+      catch (e) { showToast('切换失败：' + e.message, 'fail'); throw e; }
+    },
+  }));
+
+  (modulesResp.modules || []).forEach((m) => {
+    wrap.appendChild(buildToggleRow({
+      title: m.name, meta: m.description, checked: m.enabled,
+      disabled: !modulesResp.global,
+      onChange: async (v) => {
+        try { await api('PATCH', '/task-traces/modules/' + encodeURIComponent(m.code) + '?enabled=' + v);
+              showToast(m.name + (v ? ' 已开启' : ' 已关闭')); }
+        catch (e) { showToast('切换失败：' + e.message, 'fail'); throw e; }
+      },
+    }));
+  });
+
+  [
+    { f: 'traceSamplingThreshold', t: '采样阈值', m: '单任务预估 span 数超过该值时启用 chunk 采样；0 禁用', u: 'spans' },
+    { f: 'traceMaxAgeDays',        t: '保留天数', m: '超过该天数的 span 会被定时清理；0 不按时间清理',  u: '天' },
+    { f: 'traceMaxRows',           t: '最大行数', m: '超过后按时间删除最旧；0 不按行数清理',           u: '行' },
+    { f: 'traceVacuumThresholdMB', t: 'VACUUM 阈值', m: '数据库文件超过该 MB 时清理后执行 VACUUM；0 禁用', u: 'MB' },
+  ].forEach((c) => {
+    wrap.appendChild(buildNumRow({
+      title: c.t, meta: c.m, value: cfg[c.f] || 0, unit: c.u,
+      onCommit: async (v) => {
+        try {
+          const updated = await api('PATCH', '/task-traces/config', { [c.f]: v });
+          Object.assign(cfg, updated);
+          showToast(c.t + ' 已更新为 ' + v);
+        } catch (e) { showToast('保存失败：' + e.message, 'fail'); throw e; }
+      },
+    }));
+  });
+
+  wrap.appendChild(el('div', { class: 'settings-row' }, [
+    el('div', { class: 'settings-label' }, [
+      el('div', { class: 'l-title' }, '立即清理'),
+      el('div', { class: 'l-meta' }, '使用当前保留策略立即扫描并删除超期 span'),
+    ]),
+    el('button', {
+      class: 'btn',
+      on: {
+        click: async (e) => {
+          const btn = e.currentTarget; btn.disabled = true; btn.textContent = '清理中…';
+          try {
+            const n = await api('POST', '/task-traces/cleanup');
+            showToast('已删除 ' + n.deleted + ' 条过期 span');
+          } catch (err) {
+            showToast('清理失败：' + err.message, 'fail');
+          } finally {
+            btn.disabled = false; btn.textContent = '立即清理';
+          }
+        },
+      },
+    }, '立即清理'),
+  ]));
+
+  return wrap;
+}
+
+function buildToggleRow({ title, meta, checked, disabled, onChange }) {
+  const row = el('div', { class: 'settings-row' + (disabled ? ' disabled' : '') });
+  row.appendChild(el('div', { class: 'settings-label' }, [
+    el('div', { class: 'l-title' }, title),
+    meta ? el('div', { class: 'l-meta' }, meta) : null,
+  ]));
+  const lbl = el('label', { class: 'toggle' });
+  const inp = el('input', { type: 'checkbox' });
+  inp.checked = !!checked;
+  inp.disabled = !!disabled;
+  inp.addEventListener('change', async () => {
+    const next = inp.checked;
+    try { await onChange(next); }
+    catch { inp.checked = !next; }
+  });
+  lbl.appendChild(inp);
+  lbl.appendChild(el('span', { class: 'toggle-slider' }));
+  row.appendChild(lbl);
+  return row;
+}
+
+function buildNumRow({ title, meta, value, unit, onCommit }) {
+  const row = el('div', { class: 'settings-row' });
+  row.appendChild(el('div', { class: 'settings-label' }, [
+    el('div', { class: 'l-title' }, title),
+    meta ? el('div', { class: 'l-meta' }, meta) : null,
+  ]));
+  const wrap = el('div', { style: { display: 'inline-flex', alignItems: 'center', gap: '8px' } });
+  const inp = el('input', {
+    type: 'number', min: '0', value: String(value),
+    style: { width: '110px', height: '32px', padding: '0 10px', textAlign: 'right',
+             fontFamily: 'ui-monospace, Menlo, Consolas, monospace',
+             border: '1px solid #e5e7eb', borderRadius: '8px' },
+  });
+  let prev = value;
+  const commit = async () => {
+    const n = Number(inp.value);
+    if (!Number.isFinite(n) || n < 0) {
+      showToast(title + ' 必须是非负数字', 'fail'); inp.value = String(prev); return;
+    }
+    if (Math.floor(n) === prev) return;
+    try { await onCommit(Math.floor(n)); prev = Math.floor(n); }
+    catch { inp.value = String(prev); }
+  };
+  inp.addEventListener('blur', commit);
+  inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); commit(); } });
+  wrap.appendChild(inp);
+  wrap.appendChild(el('span', { style: { color: '#94a3b8', fontSize: '12px', minWidth: '36px' } }, unit));
+  row.appendChild(wrap);
+  return row;
+}
+
+// 启动
+render();
+</script>
+</body>
+</html>

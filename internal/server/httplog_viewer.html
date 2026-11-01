@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>HTTP 请求日志 · CloudDrive Companion</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+      "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    background: #f9fafb; color: #1f2937;
+    height: 100vh; overflow: hidden;
+  }
+  #app {
+    display: flex; flex-direction: column; height: 100%; width: 100%; overflow: hidden;
+  }
+  .page-header {
+    padding: 14px 24px; background: #fff; border-bottom: 1px solid #e5e7eb;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05); display: flex; align-items: center;
+    gap: 16px; flex-shrink: 0;
+  }
+  .page-header h1 { font-size: 14px; font-weight: 600; color: #111827; }
+  .page-header .subtitle { color: #6b7280; font-size: 13px; }
+  .header-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+  .content { flex: 1; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+  .http-log-filters {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+    margin: 12px 16px 0; padding: 10px 12px;
+    background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; flex-shrink: 0;
+  }
+  .filter-input {
+    flex: 1 1 220px; min-width: 180px; padding: 6px 10px;
+    font-size: 13px; border: 1px solid #cbd5e1; border-radius: 4px; outline: none;
+  }
+  .filter-input:focus { border-color: #3b82f6; }
+  .filter-select {
+    padding: 6px 10px; font-size: 13px; border: 1px solid #cbd5e1;
+    border-radius: 4px; background: #fff; cursor: pointer;
+  }
+  .auto-refresh-label {
+    margin-left: auto; display: inline-flex; align-items: center; gap: 6px;
+    font-size: 12px; color: #64748b; user-select: none; cursor: pointer;
+  }
+  .auto-refresh-label input { cursor: pointer; }
+  .page-btn {
+    padding: 6px 14px; font-size: 13px; background: #f1f5f9; color: #1e293b;
+    border: 1px solid #e2e8f0; border-radius: 6px; cursor: pointer; transition: background 0.15s;
+  }
+  .page-btn:hover:not(:disabled) { background: #e2e8f0; }
+  .page-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  .filter-checkbox-label {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 13px; color: #4b5563; user-select: none; cursor: pointer;
+  }
+  .filter-checkbox-label input { cursor: pointer; }
+  .back-btn {
+    background: none; border: none; color: #2563eb; cursor: pointer;
+    font-size: 13px; padding: 0 0 12px 0; display: block;
+  }
+  .back-btn:hover { text-decoration: underline; }
+  .table-wrap { flex: 1; overflow-y: auto; padding: 12px 16px; }
+  .meta-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .meta-table th {
+    text-align: center; padding: 8px 10px; background: #f9fafb;
+    color: #374151; border-bottom: 1px solid #e5e7eb; font-weight: 600;
+    position: sticky; top: 0; z-index: 1;
+  }
+  .meta-table td {
+    text-align: center; padding: 8px 10px; border-bottom: 1px solid #f3f4f6; color: #1f2937;
+    max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .meta-table tr:last-child td { border-bottom: none; }
+  .history-row { cursor: pointer; }
+  .history-row:hover td { background: #f0f9ff; }
+  .td-action { color: #2563eb; font-weight: 500; white-space: nowrap; }
+  .query-suffix { color: #94a3b8; font-size: 12px; }
+  .http-method {
+    display: inline-block; padding: 2px 8px; border-radius: 4px;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.02em;
+  }
+  .method-get { background: #dbeafe; color: #1d4ed8; }
+  .method-post { background: #dcfce7; color: #15803d; }
+  .method-put { background: #fef3c7; color: #b45309; }
+  .method-delete { background: #fee2e2; color: #b91c1c; }
+  .method-options { background: #ede9fe; color: #6d28d9; }
+  .method-head { background: #f1f5f9; color: #475569; }
+  .http-status {
+    display: inline-block; padding: 2px 8px; border-radius: 4px;
+    font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums;
+  }
+  .status-2xx { background: #dcfce7; color: #166534; }
+  .status-3xx { background: #e0e7ff; color: #3730a3; }
+  .status-4xx { background: #fef3c7; color: #92400e; }
+  .status-5xx { background: #fee2e2; color: #991b1b; }
+  .status-pending { background: #f1f5f9; color: #475569; }
+  .pagination {
+    display: flex; align-items: center; justify-content: center;
+    gap: 12px; padding: 12px 16px; font-size: 13px; color: #475569;
+    border-top: 1px solid #f3f4f6; flex-shrink: 0; background: #fff;
+  }
+  .page-info { font-variant-numeric: tabular-nums; }
+  .page-size-select {
+    margin-left: 12px; padding: 5px 8px; font-size: 12px;
+    border: 1px solid #e2e8f0; border-radius: 6px; background: #fff; cursor: pointer;
+  }
+  .detail-wrap { flex: 1; overflow-y: auto; padding: 16px 20px; }
+  .http-log-detail { display: flex; flex-direction: column; gap: 14px; }
+  .meta-summary {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 10px;
+    padding: 10px 12px; background: #f8fafc; border-radius: 6px; border: 1px solid #e2e8f0;
+    font-size: 12px; color: #6b7280;
+  }
+  .detail-path {
+    font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+    font-size: 13px; color: #1e293b; word-break: break-all; flex: 1 1 auto;
+  }
+  .detail-meta { font-size: 12px; color: #64748b; width: 100%; }
+  .detail-section {
+    background: #fafafa; border: 1px solid #e5e7eb; border-radius: 6px; padding: 10px 12px;
+  }
+  .detail-section-title {
+    font-size: 13px; font-weight: 600; color: #334155; margin-bottom: 8px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .truncated-badge {
+    display: inline-block; padding: 2px 8px; font-size: 11px; font-weight: 500;
+    background: #fef3c7; color: #92400e; border-radius: 4px;
+  }
+  .raw-body {
+    margin: 0; padding: 8px;
+    font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+    font-size: 12px; color: #1e293b; background: #fff;
+    border: 1px solid #e5e7eb; border-radius: 4px;
+    white-space: pre-wrap; word-break: break-all; max-height: 400px; overflow-y: auto;
+  }
+  .meta-empty { color: #9ca3af; font-size: 13px; text-align: center; padding: 32px 0; }
+
+  /* JSON 树样式 */
+  .jt { font-family: ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace; font-size: 12px; line-height: 1.6; }
+  .jt-row { display: flex; align-items: flex-start; }
+  .jt-row:hover { background: rgba(59,130,246,0.04); }
+  .jt-line { width: 28px; text-align: right; padding-right: 10px; color: #94a3b8; user-select: none; flex-shrink: 0; font-size: 11px; }
+  .jt-content { flex: 1; white-space: pre-wrap; word-break: break-all; }
+  .jt-key { color: #7c3aed; }
+  .jt-str { color: #16a34a; }
+  .jt-num { color: #2563eb; }
+  .jt-bool { color: #ea580c; }
+  .jt-null { color: #94a3b8; }
+  .jt-bracket { color: #64748b; }
+  .jt-indent { display: inline-block; width: 16px; }
+
+  @media (max-width: 768px) {
+    .page-header { padding: 12px 16px; }
+    .http-log-filters { margin: 8px 10px 0; padding: 8px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <header class="page-header">
+    <h1>HTTP 请求日志</h1>
+    <span class="subtitle">共 {{ total }} 条 · 数据库 {{ formatSize(dbStats.dbSize || 0) }}</span>
+    <div class="header-actions">
+      <a class="page-btn" href="/httplog/sequence" style="text-decoration: none;">📈 时序图</a>
+      <button class="page-btn" @click="clearAllLogs" :disabled="loading" style="color: #b91c1c; border-color: #fca5a5; background: #fef2f2;">🗑️ 清空全部</button>
+      <label class="auto-refresh-label">
+        <input type="checkbox" v-model="autoRefresh" @change="setupAutoRefresh" /> 自动刷新（3 秒）
+      </label>
+      <button class="page-btn" @click="refresh" :disabled="loading">
+        {{ loading ? '刷新中…' : '🔄 刷新' }}
+      </button>
+    </div>
+  </header>
+
+  <section class="content">
+    <div class="http-log-filters">
+      <input v-model="filterDraft.pathLike" placeholder="按路径模糊搜索（例: /upload）" class="filter-input"
+             @keyup.enter="applyFilter" />
+      <select v-model="filterDraft.method" class="filter-select" @change="applyFilter">
+        <option value="">全部方法</option>
+        <option value="GET">GET</option>
+        <option value="POST">POST</option>
+        <option value="PUT">PUT</option>
+        <option value="DELETE">DELETE</option>
+        <option value="OPTIONS">OPTIONS</option>
+      </select>
+      <select v-model="filterDraft.statusGroup" class="filter-select" @change="applyFilter">
+        <option value="">全部状态</option>
+        <option value="2xx">2xx</option>
+        <option value="3xx">3xx</option>
+        <option value="4xx">4xx</option>
+        <option value="5xx">5xx</option>
+      </select>
+      <button class="page-btn" @click="applyFilter" :disabled="loading">查询</button>
+      <button class="page-btn" @click="resetFilter" :disabled="loading">重置</button>
+      <label class="filter-checkbox-label" style="margin-left: 8px;">
+        <input type="checkbox" v-model="filterDraft.excludePing" @change="applyFilter" /> 屏蔽 /ping
+      </label>
+      <button class="page-btn" @click="deleteLogs(selectedIds)" :disabled="loading || selectedIds.length === 0" style="margin-left: auto;">🗑️ 删除选中 ({{ selectedIds.length }})</button>
+    </div>
+
+    <!-- 列表视图 -->
+    <div v-if="!selectedLog && !entries.length" class="meta-empty">
+      {{ loading ? '加载中…' : '暂无符合条件的请求' }}
+    </div>
+    <div v-if="!selectedLog && entries.length" class="table-wrap">
+      <table class="meta-table http-log-table">
+        <thead>
+          <tr>
+            <th style="width: 32px; text-align: center;"><input type="checkbox" @change="toggleSelectAll" :checked="isAllSelected" /></th>
+            <th>#</th><th>路径</th><th>方法</th>
+            <th>状态</th><th>响应大小</th><th>耗时</th><th>时间</th><th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="rec in entries" :key="rec.id" class="history-row" @click="openDetail(rec)">
+            <td style="text-align: center;" @click.stop><input type="checkbox" v-model="selectedIds" :value="rec.id" /></td>
+            <td>{{ rec.id }}</td>
+            <td :title="rec.path + (rec.query ? '?' + rec.query : '')">
+              {{ rec.path }}<span v-if="rec.query" class="query-suffix">?{{ rec.query }}</span>
+            </td>
+            <td><span class="http-method" :class="'method-' + rec.method.toLowerCase()">{{ rec.method }}</span></td>
+            <td><span class="http-status" :class="statusClass(rec.statusCode)">{{ rec.statusCode || '—' }}</span></td>
+            <td>{{ formatSize(rec.responseBytes) }}</td>
+            <td>{{ rec.durationMs }} ms</td>
+            <td>{{ rec.timestamp }}</td>
+            <td class="td-action">
+              <span @click.stop="openDetail(rec)">查看 ›</span>
+              <span style="color: #dc2626; margin-left: 8px;" @click.stop="deleteLogs([rec.id])">删除</span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="pagination" v-if="!selectedLog && total > 0">
+      <button class="page-btn" :disabled="page <= 1 || loading" @click="goToPage(page - 1)">‹ 上一页</button>
+      <span class="page-info">第 {{ page }} / {{ totalPages }} 页 · 共 {{ total }} 条</span>
+      <button class="page-btn" :disabled="page >= totalPages || loading" @click="goToPage(page + 1)">下一页 ›</button>
+      <select v-model.number="pageSize" @change="onPageSizeChange" class="page-size-select">
+        <option :value="20">20 条/页</option>
+        <option :value="50">50 条/页</option>
+        <option :value="100">100 条/页</option>
+        <option :value="200">200 条/页</option>
+      </select>
+    </div>
+
+    <!-- 详情视图 -->
+    <div v-if="selectedLog" class="detail-wrap">
+      <div class="http-log-detail">
+        <button class="back-btn" @click="selectedLog = null">‹ 返回列表</button>
+        <div class="meta-summary">
+          <span class="http-method" :class="'method-' + selectedLog.method.toLowerCase()">{{ selectedLog.method }}</span>
+          <span class="detail-path">{{ selectedLog.path }}<span v-if="selectedLog.query">?{{ selectedLog.query }}</span></span>
+          <span class="http-status" :class="statusClass(selectedLog.statusCode)">{{ selectedLog.statusCode }}</span>
+          <span class="detail-meta">{{ selectedLog.timestamp }} · {{ selectedLog.durationMs }} ms · {{ formatSize(selectedLog.responseBytes) }} · 来自 {{ selectedLog.remoteAddr }}</span>
+        </div>
+
+        <div class="detail-section">
+          <div class="detail-section-title">请求头</div>
+          <json-tree :data="selectedLog.requestHeaders"></json-tree>
+        </div>
+
+        <div class="detail-section" v-if="selectedLog.requestBody">
+          <div class="detail-section-title">
+            请求体
+            <span v-if="selectedLog.requestBodyTruncated" class="truncated-badge">已截断（仅显示前 1 MB）</span>
+          </div>
+          <json-tree v-if="parsedRequestBody !== undefined" :data="parsedRequestBody"></json-tree>
+          <pre v-else class="raw-body">{{ selectedLog.requestBody }}</pre>
+        </div>
+
+        <div class="detail-section">
+          <div class="detail-section-title">响应头</div>
+          <json-tree :data="selectedLog.responseHeaders"></json-tree>
+        </div>
+
+        <div class="detail-section" v-if="selectedLog.responseBody">
+          <div class="detail-section-title">
+            响应体
+            <span v-if="selectedLog.responseBodyTruncated" class="truncated-badge">已截断（仅显示前 1 MB）</span>
+          </div>
+          <json-tree v-if="parsedResponseBody !== undefined" :data="parsedResponseBody"></json-tree>
+          <pre v-else class="raw-body">{{ selectedLog.responseBody }}</pre>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/vue@3.4.21/dist/vue.global.prod.js"></script>
+<script>
+const { createApp, ref, computed, onMounted, onUnmounted, h } = Vue;
+
+/* ===== 内联 JSON 树组件 ===== */
+const JsonTree = {
+  name: 'json-tree',
+  props: { data: { default: null } },
+  setup(props) {
+    const lines = computed(() => {
+      const out = [];
+      let lineNo = 0;
+      function addLine(indent, content) { out.push({ no: ++lineNo, indent, content }); }
+      function render(val, indent, trailingComma) {
+        const comma = trailingComma ? ',' : '';
+        if (val === null || val === undefined) {
+          addLine(indent, [{ t: 'null', v: 'null' + comma }]);
+        } else if (typeof val === 'boolean') {
+          addLine(indent, [{ t: 'bool', v: String(val) + comma }]);
+        } else if (typeof val === 'number') {
+          addLine(indent, [{ t: 'num', v: String(val) + comma }]);
+        } else if (typeof val === 'string') {
+          addLine(indent, [{ t: 'str', v: '"' + val.replace(/\\/g,'\\\\').replace(/"/g,'\\"') + '"' + comma }]);
+        } else if (Array.isArray(val)) {
+          if (!val.length) { addLine(indent, [{ t: 'bracket', v: '[]' + comma }]); return; }
+          addLine(indent, [{ t: 'bracket', v: '[' }]);
+          val.forEach((item, i) => render(item, indent + 1, i < val.length - 1));
+          addLine(indent, [{ t: 'bracket', v: ']' + comma }]);
+        } else if (typeof val === 'object') {
+          const keys = Object.keys(val);
+          if (!keys.length) { addLine(indent, [{ t: 'bracket', v: '{}' + comma }]); return; }
+          addLine(indent, [{ t: 'bracket', v: '{' }]);
+          keys.forEach((k, i) => {
+            const isLast = i === keys.length - 1;
+            const child = val[k];
+            if (child !== null && typeof child === 'object') {
+              const bracket = Array.isArray(child) ? '[' : '{';
+              const empty = Array.isArray(child) ? !child.length : !Object.keys(child).length;
+              if (empty) {
+                const closeBracket = Array.isArray(child) ? '[]' : '{}';
+                addLine(indent + 1, [{ t: 'key', v: k }, { t: 'bracket', v: ': ' + closeBracket + (isLast ? '' : ',') }]);
+              } else {
+                addLine(indent + 1, [{ t: 'key', v: k }, { t: 'bracket', v: ': ' + bracket }]);
+                if (Array.isArray(child)) {
+                  child.forEach((item, j) => render(item, indent + 2, j < child.length - 1));
+                  addLine(indent + 1, [{ t: 'bracket', v: ']' + (isLast ? '' : ',') }]);
+                } else {
+                  const subKeys = Object.keys(child);
+                  subKeys.forEach((sk, j) => {
+                    const sv = child[sk];
+                    if (sv !== null && typeof sv === 'object') {
+                      const inner = JSON.stringify(sv);
+                      addLine(indent + 2, [{ t: 'key', v: sk }, { t: 'bracket', v: ': ' }, { t: 'str', v: inner + (j < subKeys.length - 1 ? ',' : '') }]);
+                    } else {
+                      const parts = [{ t: 'key', v: sk }, { t: 'bracket', v: ': ' }];
+                      if (typeof sv === 'string') parts.push({ t: 'str', v: '"' + sv + '"' + (j < subKeys.length - 1 ? ',' : '') });
+                      else if (typeof sv === 'number') parts.push({ t: 'num', v: String(sv) + (j < subKeys.length - 1 ? ',' : '') });
+                      else if (typeof sv === 'boolean') parts.push({ t: 'bool', v: String(sv) + (j < subKeys.length - 1 ? ',' : '') });
+                      else parts.push({ t: 'null', v: 'null' + (j < subKeys.length - 1 ? ',' : '') });
+                      addLine(indent + 2, parts);
+                    }
+                  });
+                  addLine(indent + 1, [{ t: 'bracket', v: '}' + (isLast ? '' : ',') }]);
+                }
+              }
+            } else {
+              const parts = [{ t: 'key', v: k }, { t: 'bracket', v: ': ' }];
+              if (typeof child === 'string') parts.push({ t: 'str', v: '"' + child + '"' + (isLast ? '' : ',') });
+              else if (typeof child === 'number') parts.push({ t: 'num', v: String(child) + (isLast ? '' : ',') });
+              else if (typeof child === 'boolean') parts.push({ t: 'bool', v: String(child) + (isLast ? '' : ',') });
+              else parts.push({ t: 'null', v: 'null' + (isLast ? '' : ',') });
+              addLine(indent + 1, parts);
+            }
+          });
+          addLine(indent, [{ t: 'bracket', v: '}' + comma }]);
+        }
+      }
+      render(props.data, 0, false);
+      return out;
+    });
+
+    const classMap = { key: 'jt-key', str: 'jt-str', num: 'jt-num', bool: 'jt-bool', null: 'jt-null', bracket: 'jt-bracket' };
+
+    return () => h('div', { class: 'jt' }, lines.value.map(line =>
+      h('div', { class: 'jt-row' }, [
+        h('span', { class: 'jt-line' }, String(line.no)),
+        h('span', { class: 'jt-content' }, [
+          ...Array(line.indent).fill(null).map(() => h('span', { class: 'jt-indent' })),
+          ...line.content.map(seg => h('span', { class: classMap[seg.t] || '' }, seg.v))
+        ])
+      ])
+    ));
+  }
+};
+
+/* ===== 主应用 ===== */
+const app = createApp({
+  setup() {
+    const entries = ref([]);
+    const total = ref(0);
+    const page = ref(1);
+    const pageSize = ref(50);
+    const loading = ref(false);
+    const autoRefresh = ref(true);
+    const selectedLog = ref(null);
+    const dbStats = ref({ total: 0, dbPath: '', dbSize: 0 });
+    const filterDraft = ref({ method: '', pathLike: '', statusGroup: '', excludePing: true });
+    const filterApplied = ref({ method: '', pathLike: '', statusGroup: '', excludePing: true });
+    const selectedIds = ref([]);
+
+    const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value)));
+    const parsedRequestBody = computed(() => tryParseJson(selectedLog.value?.requestBody));
+    const parsedResponseBody = computed(() => tryParseJson(selectedLog.value?.responseBody));
+
+    function tryParseJson(text) {
+      if (!text || typeof text !== 'string') return undefined;
+      const t = text.trim();
+      if (!(t.startsWith('{') || t.startsWith('['))) return undefined;
+      try { return JSON.parse(t); } catch (_) { return undefined; }
+    }
+    function statusClass(code) {
+      if (!code) return 'status-pending';
+      if (code >= 500) return 'status-5xx';
+      if (code >= 400) return 'status-4xx';
+      if (code >= 300) return 'status-3xx';
+      if (code >= 200) return 'status-2xx';
+      return 'status-pending';
+    }
+    function formatSize(bytes) {
+      if (!bytes || bytes === 0) return '0 B';
+      const k = 1024, s = ['B','KB','MB','GB','TB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + s[i];
+    }
+
+    async function fetchLogs() {
+      if (loading.value) return;
+      loading.value = true;
+      try {
+        const f = filterApplied.value;
+        const p = new URLSearchParams({
+          page: String(page.value), size: String(pageSize.value),
+          method: f.method || '', pathLike: f.pathLike || '', statusGroup: f.statusGroup || '',
+          excludePing: f.excludePing ? 'true' : 'false'
+        });
+        const resp = await fetch('/http-logs/query?' + p.toString());
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        const result = await resp.json();
+        total.value = result.total || 0;
+        entries.value = result.entries || [];
+        if (page.value > totalPages.value) { page.value = 1; await fetchLogs(); }
+      } catch (err) {
+        console.error('加载 HTTP 日志失败:', err);
+        entries.value = []; total.value = 0;
+      } finally { loading.value = false; }
+    }
+    async function fetchStats() {
+      try {
+        const resp = await fetch('/http-logs/stats');
+        if (resp.ok) dbStats.value = await resp.json();
+      } catch (_) {}
+    }
+    async function openDetail(rec) {
+      try {
+        const resp = await fetch('/http-logs/detail?id=' + rec.id);
+        selectedLog.value = resp.ok ? await resp.json() : rec;
+      } catch (_) { selectedLog.value = rec; }
+    }
+    function applyFilter() { filterApplied.value = { ...filterDraft.value }; page.value = 1; fetchLogs(); }
+    function resetFilter() { filterDraft.value = { method: '', pathLike: '', statusGroup: '', excludePing: true }; applyFilter(); }
+    function goToPage(p) { if (p >= 1 && p <= totalPages.value) { page.value = p; fetchLogs(); } }
+    function onPageSizeChange() { page.value = 1; fetchLogs(); }
+    function refresh() { fetchLogs(); fetchStats(); }
+
+    const isAllSelected = computed(() => {
+        if (!entries.value.length) return false;
+        return entries.value.every(e => selectedIds.value.includes(e.id));
+    });
+
+    function toggleSelectAll(e) {
+        if (e.target.checked) {
+            entries.value.forEach(r => {
+                if (!selectedIds.value.includes(r.id)) selectedIds.value.push(r.id);
+            });
+        } else {
+            selectedIds.value = selectedIds.value.filter(id => !entries.value.some(r => r.id === id));
+        }
+    }
+
+    async function deleteLogs(ids) {
+        if (!ids || !ids.length) return;
+        if (!confirm(`确定要删除这 ${ids.length} 条日志吗？`)) return;
+        try {
+            const resp = await fetch('/http-logs/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(ids)
+            });
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            selectedIds.value = selectedIds.value.filter(id => !ids.includes(id));
+            if (selectedLog.value && ids.includes(selectedLog.value.id)) {
+                selectedLog.value = null;
+            }
+            fetchLogs();
+            fetchStats();
+        } catch (err) {
+            alert('删除失败: ' + err.message);
+        }
+    }
+
+    async function clearAllLogs() {
+        if (!confirm('确定要清空所有 HTTP 日志吗？此操作不可恢复。')) return;
+        try {
+            const resp = await fetch('/http-logs/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify([])
+            });
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            selectedIds.value = [];
+            selectedLog.value = null;
+            fetchLogs();
+            fetchStats();
+        } catch (err) {
+            alert('清空失败: ' + err.message);
+        }
+    }
+
+    let refreshTimer = null;
+    function setupAutoRefresh() {
+      if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
+      if (autoRefresh.value) {
+        refreshTimer = setInterval(() => {
+          if (autoRefresh.value && !selectedLog.value && !loading.value) { fetchLogs(); fetchStats(); }
+        }, 3000);
+      }
+    }
+
+    onMounted(() => { fetchLogs(); fetchStats(); setupAutoRefresh(); });
+    onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer); });
+
+    return {
+      entries, total, page, pageSize, loading, autoRefresh, selectedLog,
+      dbStats, filterDraft, totalPages, parsedRequestBody, parsedResponseBody,
+      statusClass, formatSize, openDetail, applyFilter, resetFilter,
+      goToPage, onPageSizeChange, refresh, setupAutoRefresh,
+      selectedIds, isAllSelected, toggleSelectAll, deleteLogs, clearAllLogs,
+    };
+  }
+});
+
+app.component('json-tree', JsonTree);
+app.mount('#app');
+</script>
+</body>
+</html>

@@ -1,0 +1,261 @@
+/*
+ * 任务级链路追踪 UI 设计 Token —— 不污染全局命名空间。
+ *
+ * 设计语言参考：
+ *   - Apple HIG 的克制（白底 + 浅灰边 + 中性墨色文字 + 8/12px 圆角）
+ *   - Meta / Linear 的密度感（行高 44px，字号 13/12px，等宽数字）
+ *   - Netflix 的"多彩但低饱和"（stage 配色用近 #50% 饱和度）
+ *
+ * 命名规则：所有变量以 --tt-* 前缀（trace tokens），与 Dashboard.vue 现有
+ * 系统变量（如 --accent / --surface-overlay）解耦，避免互相覆盖。
+ */
+
+:root {
+  /* ── 文字 ── */
+  --tt-text-primary:   #0f172a;   /* slate-900 标题/正文 */
+  --tt-text-secondary: #475569;   /* slate-600 副信息 */
+  --tt-text-muted:     #94a3b8;   /* slate-400 元信息 */
+  --tt-text-inverse:   #ffffff;
+
+  /* ── 表面 ── */
+  --tt-surface-base:    #ffffff;
+  --tt-surface-soft:    #f8fafc;  /* slate-50 */
+  --tt-surface-sunken:  #f1f5f9;  /* slate-100 行 hover */
+  --tt-border-soft:     #e5e7eb;
+  --tt-border-strong:   #cbd5e1;
+
+  /* ── 状态色（克制饱和度） ── */
+  --tt-status-ok:       #10b981;
+  --tt-status-ok-bg:    #ecfdf5;
+  --tt-status-warn:     #f59e0b;
+  --tt-status-warn-bg:  #fffbeb;
+  --tt-status-fail:     #ef4444;
+  --tt-status-fail-bg:  #fef2f2;
+
+  /* ── 强调色（仅用于交互高亮，不要大面积铺色） ── */
+  --tt-accent:          #2563eb;
+  --tt-accent-soft:     #eff6ff;
+
+  /* ── 时序图（HTTP 交互，TraceSequence） ── */
+  --tt-seq-in:          #10b981;  /* emerald-500  浏览器 → 客户端（入站，正常） */
+  --tt-seq-out:         #2563eb;  /* blue-600     客户端 → 远端后端（出站，正常） */
+  --tt-seq-fail:        #ef4444;  /* red-500      失败：状态码 >=400 或网络错误 */
+
+  /* ── Stage 配色（饱和度 ~50%） ── */
+  --tt-stage-scan:      #38bdf8;  /* sky-400      目录扫描 */
+  --tt-stage-meta:      #a78bfa;  /* violet-400   发送文件列表（HTTP /get-metadata 计时） */
+  --tt-stage-task:      #6366f1;  /* indigo-500   上传任务 顶层强调 */
+  --tt-stage-file:      #8b5cf6;  /* violet-500   单文件上传 */
+  --tt-stage-md5:       #f59e0b;  /* amber-500    MD5 计算 */
+  --tt-stage-check:     #14b8a6;  /* teal-500     查询已传分片 */
+  --tt-stage-chunk:     #94a3b8;  /* slate-400    分片上传（量大用中性色） */
+  --tt-stage-merge:     #f97316;  /* orange-500   服务端合并（最后一个分片的关键耗时） */
+  --tt-stage-notify:    #ec4899;  /* pink-500     通知后端合并 */
+  --tt-stage-other:     #cbd5e1;  /* slate-300    fallback */
+
+  /* ── 阴影 ── */
+  --tt-shadow-card:     0 1px 2px rgba(15, 23, 42, 0.04),
+                        0 0 0 1px rgba(15, 23, 42, 0.04);
+  --tt-shadow-pop:      0 8px 24px rgba(15, 23, 42, 0.08);
+
+  /* ── 字号 / 字距 / 字体 ── */
+  --tt-font-mono:       ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --tt-font-system:     -apple-system, BlinkMacSystemFont, "Segoe UI",
+                        "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
+                        Roboto, sans-serif;
+
+  /* ── 几何 ── */
+  --tt-radius-card:     12px;
+  --tt-radius-control:  8px;
+  --tt-radius-bar:      4px;
+  --tt-row-height:      44px;     /* Apple HIG 推荐的可点击最小高度 */
+
+  /* ── 缓动（Apple 标准） ── */
+  --tt-ease-emphasized: cubic-bezier(0.32, 0.72, 0, 1);
+  --tt-duration-fast:   80ms;
+  --tt-duration-normal: 200ms;
+  --tt-duration-slow:   300ms;
+}
+
+/*
+ * 限定作用域到 .trace-modal 后代，避免无意污染 Dashboard 现有样式。
+ * 所有 trace/* 组件挂在 .trace-modal 容器下，所以下面的基础样式都安全。
+ */
+
+.trace-modal {
+  font-family: var(--tt-font-system);
+  color: var(--tt-text-primary);
+}
+
+.trace-modal *,
+.trace-modal *::before,
+.trace-modal *::after {
+  box-sizing: border-box;
+}
+
+/* 数字一律等宽，对齐 */
+.trace-modal .tt-num {
+  font-family: var(--tt-font-mono);
+  font-feature-settings: "tnum" 1;
+}
+
+/* 通用 badge */
+.trace-modal .tt-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px;
+  border-radius: var(--tt-radius-control);
+  font-size: 12px;
+  font-weight: 500;
+}
+.trace-modal .tt-badge-ok    { color: var(--tt-status-ok);   background: var(--tt-status-ok-bg); }
+.trace-modal .tt-badge-warn  { color: var(--tt-status-warn); background: var(--tt-status-warn-bg); }
+.trace-modal .tt-badge-fail  { color: var(--tt-status-fail); background: var(--tt-status-fail-bg); }
+
+/* 状态点 */
+.trace-modal .tt-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.trace-modal .tt-dot-ok    { background: var(--tt-status-ok); }
+.trace-modal .tt-dot-warn  { background: var(--tt-status-warn); }
+.trace-modal .tt-dot-fail  { background: var(--tt-status-fail); }
+.trace-modal .tt-dot-muted { background: var(--tt-text-muted); }
+
+/* 文本截断 */
+.trace-modal .tt-truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 元信息 */
+.trace-modal .tt-meta {
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: var(--tt-text-muted);
+}
+
+/* 标题层级 */
+.trace-modal .tt-title-lg {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--tt-text-primary);
+}
+.trace-modal .tt-title-sm {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--tt-text-primary);
+}
+
+/* 工具按钮 */
+.trace-modal .tt-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: var(--tt-radius-control);
+  border: 1px solid var(--tt-border-soft);
+  background: var(--tt-surface-base);
+  color: var(--tt-text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--tt-duration-fast) ease,
+              color var(--tt-duration-fast) ease,
+              border-color var(--tt-duration-fast) ease;
+}
+.trace-modal .tt-button:hover {
+  background: var(--tt-surface-sunken);
+  color: var(--tt-text-primary);
+}
+.trace-modal .tt-button:active {
+  background: var(--tt-border-soft);
+}
+.trace-modal .tt-button:disabled {
+  color: var(--tt-text-muted);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+.trace-modal .tt-button-primary {
+  background: var(--tt-accent);
+  border-color: var(--tt-accent);
+  color: var(--tt-text-inverse);
+}
+.trace-modal .tt-button-primary:hover {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+  color: var(--tt-text-inverse);
+}
+
+/* 输入控件 */
+.trace-modal .tt-input {
+  height: 32px;
+  padding: 0 12px;
+  border-radius: var(--tt-radius-control);
+  border: 1px solid var(--tt-border-soft);
+  background: var(--tt-surface-base);
+  font-size: 13px;
+  color: var(--tt-text-primary);
+  outline: none;
+  transition: border-color var(--tt-duration-fast) ease,
+              box-shadow var(--tt-duration-fast) ease;
+}
+.trace-modal .tt-input:focus {
+  border-color: var(--tt-accent);
+  box-shadow: 0 0 0 3px var(--tt-accent-soft);
+}
+
+/* 列表项 */
+.trace-modal .tt-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: var(--tt-row-height);
+  padding: 0 16px;
+  border-bottom: 1px solid var(--tt-border-soft);
+  cursor: pointer;
+  transition: background var(--tt-duration-fast) ease;
+}
+.trace-modal .tt-row:hover { background: var(--tt-surface-sunken); }
+.trace-modal .tt-row:last-child { border-bottom: none; }
+
+/* 卡片 */
+.trace-modal .tt-card {
+  background: var(--tt-surface-base);
+  border-radius: var(--tt-radius-card);
+  box-shadow: var(--tt-shadow-card);
+  overflow: hidden;
+}
+
+/* 空态 */
+.trace-modal .tt-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 64px 16px;
+  color: var(--tt-text-muted);
+  font-size: 13px;
+  gap: 12px;
+}
+
+/* 骨架屏 */
+.trace-modal .tt-skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--tt-surface-sunken) 0%,
+    var(--tt-border-soft) 50%,
+    var(--tt-surface-sunken) 100%
+  );
+  background-size: 200% 100%;
+  border-radius: var(--tt-radius-control);
+  animation: tt-shimmer 1.4s linear infinite;
+}
+@keyframes tt-shimmer {
+  0%   { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}

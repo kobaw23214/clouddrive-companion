@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>HTTP 时序图 · CloudDrive Companion</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+      "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    background: #f9fafb; color: #1f2937;
+    height: 100vh; overflow: hidden;
+  }
+  #app { display: flex; flex-direction: column; height: 100%; width: 100%; overflow: hidden; }
+  .page-header {
+    padding: 14px 24px; background: #fff; border-bottom: 1px solid #e5e7eb;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05); display: flex; align-items: center;
+    gap: 16px; flex-shrink: 0;
+  }
+  .page-header h1 { font-size: 14px; font-weight: 600; color: #111827; }
+  .page-header .subtitle { color: #6b7280; font-size: 13px; }
+  .header-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+  .content { flex: 1; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+  .seq-filters {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+    margin: 12px 16px 0; padding: 10px 12px;
+    background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; flex-shrink: 0;
+  }
+  .filter-input {
+    flex: 0 1 240px; min-width: 160px; padding: 6px 10px;
+    font-size: 13px; border: 1px solid #cbd5e1; border-radius: 4px; outline: none;
+  }
+  .filter-input:focus { border-color: #3b82f6; }
+  .filter-select {
+    padding: 6px 10px; font-size: 13px; border: 1px solid #cbd5e1;
+    border-radius: 4px; background: #fff; cursor: pointer;
+  }
+  .filter-label { font-size: 13px; color: #4b5563; }
+  .page-btn {
+    padding: 6px 14px; font-size: 13px; background: #f1f5f9; color: #1e293b;
+    border: 1px solid #e2e8f0; border-radius: 6px; cursor: pointer; transition: background 0.15s;
+    text-decoration: none; display: inline-block;
+  }
+  .page-btn:hover:not(:disabled) { background: #e2e8f0; }
+  .page-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  .auto-refresh-label {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 12px; color: #64748b; user-select: none; cursor: pointer;
+  }
+  .auto-refresh-label input { cursor: pointer; }
+  .legend {
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    margin: 8px 16px 0; font-size: 12px; color: #64748b; flex-shrink: 0;
+  }
+  .legend .swatch {
+    display: inline-block; width: 18px; height: 4px; border-radius: 2px;
+    vertical-align: middle; margin-right: 5px;
+  }
+  .legend .hint { margin-left: auto; color: #94a3b8; }
+  .chart-wrap { flex: 1; overflow: auto; margin: 8px 16px 12px; background: #fff;
+    border: 1px solid #e5e7eb; border-radius: 6px; position: relative; min-height: 0; }
+  .chart-wrap svg { display: block; }
+  .lane-label { font-size: 12px; fill: #334155; font-weight: 600; }
+  .axis-label { font-size: 11px; fill: #94a3b8; font-variant-numeric: tabular-nums; }
+  .empty-text {
+    padding: 48px 0; text-align: center; color: #9ca3af; font-size: 13px;
+  }
+  /* 右侧详情弹层 */
+  .detail-panel {
+    position: absolute; top: 0; right: 0; bottom: 0; width: 440px; max-width: 90%;
+    background: #fff; border-left: 1px solid #e5e7eb;
+    box-shadow: -4px 0 12px rgba(0,0,0,0.08);
+    display: none; flex-direction: column; z-index: 10;
+  }
+  .detail-panel.open { display: flex; }
+  .detail-head {
+    display: flex; align-items: center; gap: 8px; padding: 10px 14px;
+    border-bottom: 1px solid #f3f4f6; flex-shrink: 0;
+  }
+  .detail-head .title { font-size: 13px; font-weight: 600; color: #334155; flex: 1;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .detail-close {
+    background: none; border: none; font-size: 18px; color: #94a3b8; cursor: pointer; padding: 0 4px;
+  }
+  .detail-close:hover { color: #334155; }
+  .detail-body { flex: 1; overflow: auto; padding: 12px 14px; }
+  .raw-json {
+    margin: 0; padding: 8px; font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+    font-size: 12px; color: #1e293b; background: #fafafa;
+    border: 1px solid #e5e7eb; border-radius: 4px;
+    white-space: pre-wrap; word-break: break-all;
+  }
+  .http-method {
+    display: inline-block; padding: 2px 8px; border-radius: 4px;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.02em;
+  }
+  .method-get { background: #dbeafe; color: #1d4ed8; }
+  .method-post { background: #dcfce7; color: #15803d; }
+  .method-put { background: #fef3c7; color: #b45309; }
+  .method-delete { background: #fee2e2; color: #b91c1c; }
+  .http-status {
+    display: inline-block; padding: 2px 8px; border-radius: 4px;
+    font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums;
+  }
+  .status-2xx { background: #dcfce7; color: #166534; }
+  .status-3xx { background: #e0e7ff; color: #3730a3; }
+  .status-4xx { background: #fef3c7; color: #92400e; }
+  .status-5xx { background: #fee2e2; color: #991b1b; }
+  .status-pending { background: #f1f5f9; color: #475569; }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <header class="page-header">
+    <h1>HTTP 时序图</h1>
+    <span class="subtitle" id="subtitle">加载中…</span>
+    <div class="header-actions">
+      <label class="auto-refresh-label">
+        <input type="checkbox" id="autoRefresh" /> 自动刷新（10 秒）
+      </label>
+      <a class="page-btn" href="/httplog">‹ 返回日志列表</a>
+    </div>
+  </header>
+
+  <section class="content">
+    <div class="seq-filters">
+      <span class="filter-label">时间范围</span>
+      <select id="rangeSel" class="filter-select">
+        <option value="900000">最近 15 分钟</option>
+        <option value="3600000" selected>最近 1 小时</option>
+        <option value="21600000">最近 6 小时</option>
+        <option value="86400000">最近 24 小时</option>
+      </select>
+      <span class="filter-label">方向</span>
+      <select id="dirSel" class="filter-select">
+        <option value="">全部</option>
+        <option value="in">浏览器 → 客户端</option>
+        <option value="out">客户端 → 后端</option>
+      </select>
+      <input id="taskIdInput" class="filter-input" placeholder="taskId 过滤（可留空）" />
+      <button class="page-btn" id="queryBtn">查询</button>
+    </div>
+
+    <div class="legend">
+      <span><span class="swatch" style="background:#16a34a;"></span>入站（浏览器 → 客户端）</span>
+      <span><span class="swatch" style="background:#2563eb;"></span>出站（客户端 → 远端后端）</span>
+      <span><span class="swatch" style="background:#dc2626;"></span>失败（状态码 ≥ 400 或网络错误）</span>
+      <span class="hint">实线 = 请求，横条 = 接收方处理耗时，虚线 = 响应返回；点击事件查看详情</span>
+    </div>
+
+    <div class="chart-wrap" id="chartWrap">
+      <svg id="chart" xmlns="http://www.w3.org/2000/svg"></svg>
+      <div class="empty-text" id="emptyText" style="display:none;">该时间范围内暂无日志</div>
+      <div class="detail-panel" id="detailPanel">
+        <div class="detail-head">
+          <span class="title" id="detailTitle">事件详情</span>
+          <button class="detail-close" id="detailClose" title="关闭">×</button>
+        </div>
+        <div class="detail-body">
+          <div id="detailMeta" style="margin-bottom:10px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;"></div>
+          <pre class="raw-json" id="detailJson"></pre>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ─── 常量 ───
+  var PAGE_SIZE = 500;            // 只取第 1 页，超过则在副标题提示
+  var LABEL_W = 96;               // 左侧泳道标签宽度
+  var RIGHT_PAD = 24;
+  var TOP_PAD = 34;               // 时间轴区域
+  var LANE_GAP = 100;             // 泳道间距
+  var LANE_NAMES = ['浏览器', '客户端', '远端后端'];
+  var LANE_Y = [TOP_PAD + 46, TOP_PAD + 46 + LANE_GAP, TOP_PAD + 46 + LANE_GAP * 2];
+  var CHART_H = LANE_Y[2] + 56;
+  var COLOR_IN = '#16a34a';       // 入站：绿
+  var COLOR_OUT = '#2563eb';      // 出站：蓝
+  var COLOR_FAIL = '#dc2626';     // 失败：红
+
+  var NS = 'http://www.w3.org/2000/svg';
+
+  // ─── DOM 引用 ───
+  var chartWrap = document.getElementById('chartWrap');
+  var chart = document.getElementById('chart');
+  var emptyText = document.getElementById('emptyText');
+  var subtitle = document.getElementById('subtitle');
+  var rangeSel = document.getElementById('rangeSel');
+  var dirSel = document.getElementById('dirSel');
+  var taskIdInput = document.getElementById('taskIdInput');
+  var queryBtn = document.getElementById('queryBtn');
+  var autoRefreshBox = document.getElementById('autoRefresh');
+  var detailPanel = document.getElementById('detailPanel');
+  var detailTitle = document.getElementById('detailTitle');
+  var detailMeta = document.getElementById('detailMeta');
+  var detailJson = document.getElementById('detailJson');
+  var detailClose = document.getElementById('detailClose');
+
+  var lastEntries = [];
+  var lastRange = null; // {fromMs, toMs}
+  var refreshTimer = null;
+
+  // ─── 工具 ───
+  function el(name, attrs) {
+    var node = document.createElementNS(NS, name);
+    if (attrs) {
+      for (var k in attrs) node.setAttribute(k, attrs[k]);
+    }
+    return node;
+  }
+
+  function pad2(n) { return n < 10 ? '0' + n : '' + n; }
+
+  function fmtTime(ms) {
+    var d = new Date(ms);
+    return pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds());
+  }
+
+  function fmtRange(ms) {
+    var d = new Date(ms);
+    return (d.getMonth() + 1) + '-' + pad2(d.getDate()) + ' ' + fmtTime(ms);
+  }
+
+  function statusClass(code) {
+    if (!code) return 'status-pending';
+    if (code >= 500) return 'status-5xx';
+    if (code >= 400) return 'status-4xx';
+    if (code >= 300) return 'status-3xx';
+    return 'status-2xx';
+  }
+
+  // 失败判定：statusCode >= 400，或 == 0（网络错误，无响应）
+  function isFail(e) { return e.statusCode >= 400 || e.statusCode === 0; }
+
+  function eventColor(e) {
+    if (isFail(e)) return COLOR_FAIL;
+    return e.direction === 'in' ? COLOR_IN : COLOR_OUT;
+  }
+
+  // ─── 数据加载 ───
+  function loadData() {
+    var rangeMs = parseInt(rangeSel.value, 10);
+    var toMs = Date.now();
+    var fromMs = toMs - rangeMs;
+    var params = new URLSearchParams({
+      fromMs: String(fromMs),
+      toMs: String(toMs),
+      page: '1',
+      size: String(PAGE_SIZE)
+    });
+    var taskId = taskIdInput.value.trim();
+    if (taskId) params.set('taskId', taskId);
+    if (dirSel.value) params.set('direction', dirSel.value);
+
+    queryBtn.disabled = true;
+    fetch('/http-logs/sequence?' + params.toString())
+      .then(function (resp) {
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        return resp.json();
+      })
+      .then(function (result) {
+        lastEntries = result.entries || [];
+        lastRange = { fromMs: fromMs, toMs: toMs };
+        var note = '共 ' + (result.total || 0) + ' 条';
+        if ((result.total || 0) > lastEntries.length) {
+          note += ' · 仅显示前 ' + lastEntries.length + ' 条';
+        }
+        note += ' · ' + fmtRange(fromMs) + ' ~ ' + fmtRange(toMs);
+        subtitle.textContent = note;
+        render();
+      })
+      .catch(function (err) {
+        subtitle.textContent = '加载失败: ' + err.message;
+        lastEntries = [];
+        render();
+      })
+      .finally(function () { queryBtn.disabled = false; });
+  }
+
+  // ─── 渲染 ───
+  function render() {
+    while (chart.firstChild) chart.removeChild(chart.firstChild);
+    if (!lastRange) return;
+
+    var width = Math.max(chartWrap.clientWidth - 2, 480);
+    chart.setAttribute('width', width);
+    chart.setAttribute('height', CHART_H);
+    chartWrap.style.minHeight = CHART_H + 'px';
+
+    var fromMs = lastRange.fromMs;
+    var toMs = lastRange.toMs;
+    var span = Math.max(1, toMs - fromMs);
+    var chartL = LABEL_W;
+    var chartR = width - RIGHT_PAD;
+
+    function tx(ms) {
+      var x = chartL + ((ms - fromMs) / span) * (chartR - chartL);
+      return Math.max(chartL, Math.min(chartR, x));
+    }
+
+    // 箭头 marker（按颜色各定义一个，orient=auto 自动跟随线条方向）
+    var defs = el('defs');
+    [['in', COLOR_IN], ['out', COLOR_OUT], ['fail', COLOR_FAIL]].forEach(function (pair) {
+      var marker = el('marker', {
+        id: 'arrow-' + pair[0], viewBox: '0 0 10 10', refX: '9', refY: '5',
+        markerWidth: '7', markerHeight: '7', orient: 'auto-start-reverse'
+      });
+      marker.appendChild(el('path', { d: 'M 0 0 L 10 5 L 0 10 z', fill: pair[1] }));
+      defs.appendChild(marker);
+    });
+    chart.appendChild(defs);
+
+    // 泳道背景 + 分隔线 + 标签
+    for (var i = 0; i < 3; i++) {
+      if (i % 2 === 0) {
+        chart.appendChild(el('rect', {
+          x: 0, y: LANE_Y[i] - LANE_GAP / 2, width: width, height: LANE_GAP,
+          fill: '#f8fafc'
+        }));
+      }
+      chart.appendChild(el('line', {
+        x1: LABEL_W, y1: LANE_Y[i], x2: chartR, y2: LANE_Y[i],
+        stroke: '#e2e8f0', 'stroke-dasharray': '4 4'
+      }));
+      var label = el('text', { x: LABEL_W - 12, y: LANE_Y[i] + 4, 'text-anchor': 'end', 'class': 'lane-label' });
+      label.textContent = LANE_NAMES[i];
+      chart.appendChild(label);
+    }
+
+    // 时间轴刻度（6 等分）
+    var TICKS = 6;
+    for (var t = 0; t <= TICKS; t++) {
+      var tickMs = fromMs + (span * t) / TICKS;
+      var x = tx(tickMs);
+      chart.appendChild(el('line', {
+        x1: x, y1: TOP_PAD - 6, x2: x, y2: CHART_H - 24,
+        stroke: '#f1f5f9'
+      }));
+      var tickLabel = el('text', { x: x, y: TOP_PAD - 12, 'text-anchor': 'middle', 'class': 'axis-label' });
+      tickLabel.textContent = fmtTime(tickMs);
+      chart.appendChild(tickLabel);
+    }
+
+    if (!lastEntries.length) {
+      emptyText.style.display = 'block';
+      return;
+    }
+    emptyText.style.display = 'none';
+
+    // 事件：实线请求箭头 → 接收方耗时横条 → 虚线返回箭头
+    lastEntries.forEach(function (e) {
+      var isIn = e.direction === 'in';
+      // 泳道索引：浏览器=0 客户端=1 远端后端=2；入站 0→1，出站 1→2
+      var fromLane = isIn ? 0 : 1;
+      var toLane = isIn ? 1 : 2;
+      var y1 = LANE_Y[fromLane];
+      var y2 = LANE_Y[toLane];
+      var color = eventColor(e);
+      var markerId = isFail(e) ? 'arrow-fail' : (isIn ? 'arrow-in' : 'arrow-out');
+
+      var x1 = tx(e.timestampMs);
+      var durMs = Math.max(0, e.durationMs || 0);
+      var x2 = durMs > 0 ? tx(e.timestampMs + durMs) : x1;
+      var barW = durMs > 0 ? Math.max(3, x2 - x1) : 0;
+      if (x1 + barW > chartR) barW = chartR - x1; // 横条不超出可视区（如 SSE 断开条）
+
+      var g = el('g', { style: 'cursor:pointer;' });
+
+      var title = el('title');
+      title.textContent =
+        (e.method || '') + ' ' + (e.path || '') + (e.query ? '?' + e.query : '') + '\n' +
+        '状态: ' + (e.statusCode || '—（网络错误）') + '\n' +
+        '耗时: ' + durMs + ' ms\n' +
+        '时间: ' + (e.timestamp || '') + '\n' +
+        '方向: ' + (isIn ? '浏览器 → 客户端' : '客户端 → 远端后端') + '\n' +
+        'taskId: ' + (e.taskId || '—');
+      g.appendChild(title);
+
+      // 发起方小圆点
+      g.appendChild(el('circle', { cx: x1, cy: y1, r: 3.5, fill: color }));
+      // 实线请求箭头
+      g.appendChild(el('line', {
+        x1: x1, y1: y1 + 6, x2: x1, y2: y2 - 8,
+        stroke: color, 'stroke-width': 1.6, 'marker-end': 'url(#' + markerId + ')'
+      }));
+
+      if (durMs > 0 && barW > 0) {
+        // 接收方耗时横条
+        g.appendChild(el('rect', {
+          x: x1, y: y2 - 4, width: barW, height: 8, rx: 2,
+          fill: color, 'fill-opacity': 0.28, stroke: color, 'stroke-width': 1
+        }));
+        // 虚线返回箭头（横条末端 → 发起方）
+        var xr = x1 + barW;
+        g.appendChild(el('line', {
+          x1: xr, y1: y2 - 8, x2: xr, y2: y1 + 6,
+          stroke: color, 'stroke-width': 1.2, 'stroke-dasharray': '4 3',
+          'marker-end': 'url(#' + markerId + ')'
+        }));
+        g.appendChild(el('circle', { cx: xr, cy: y2, r: 2.5, fill: color }));
+      } else {
+        // 零耗时事件在接收方也画个点，保证可见
+        g.appendChild(el('circle', { cx: x1, cy: y2, r: 3, fill: color }));
+      }
+
+      g.addEventListener('click', function () { openDetail(e); });
+      chart.appendChild(g);
+    });
+  }
+
+  // ─── 详情弹层 ───
+  function openDetail(e) {
+    detailTitle.textContent = '事件详情 #' + e.id;
+    detailMeta.innerHTML = '';
+    var methodChip = document.createElement('span');
+    methodChip.className = 'http-method method-' + String(e.method || '').toLowerCase();
+    methodChip.textContent = e.method || '';
+    var statusChip = document.createElement('span');
+    statusChip.className = 'http-status ' + statusClass(e.statusCode);
+    statusChip.textContent = e.statusCode || '—';
+    var pathSpan = document.createElement('span');
+    pathSpan.style.cssText = 'font-size:12px;color:#334155;word-break:break-all;';
+    pathSpan.textContent = (e.path || '') + (e.query ? '?' + e.query : '');
+    detailMeta.appendChild(methodChip);
+    detailMeta.appendChild(statusChip);
+    detailMeta.appendChild(pathSpan);
+    detailJson.textContent = JSON.stringify(e, null, 2);
+    detailPanel.classList.add('open');
+  }
+
+  detailClose.addEventListener('click', function () {
+    detailPanel.classList.remove('open');
+  });
+
+  // ─── 事件绑定 ───
+  queryBtn.addEventListener('click', loadData);
+  taskIdInput.addEventListener('keyup', function (ev) {
+    if (ev.key === 'Enter') loadData();
+  });
+  rangeSel.addEventListener('change', loadData);
+  dirSel.addEventListener('change', loadData);
+
+  autoRefreshBox.addEventListener('change', function () {
+    if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
+    if (autoRefreshBox.checked) {
+      refreshTimer = setInterval(loadData, 10000);
+    }
+  });
+
+  window.addEventListener('resize', render);
+
+  loadData();
+})();
+</script>
+</body>
+</html>

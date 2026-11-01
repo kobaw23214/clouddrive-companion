@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>应用日志 · CloudDrive Companion</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+      "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    background: #f1f5f9;
+    color: #1f2937;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  header {
+    flex-shrink: 0;
+    padding: 14px 24px;
+    background: #ffffff;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  header h1 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: #0f172a;
+  }
+  header .subtitle {
+    color: #64748b;
+    font-size: 13px;
+  }
+  header .actions { margin-left: auto; display: flex; gap: 8px; }
+
+  .layout {
+    flex: 1 1 auto;
+    display: flex;
+    min-height: 0;
+  }
+
+  .sidebar {
+    width: 240px;
+    flex-shrink: 0;
+    background: #f8fafc;
+    border-right: 1px solid #e2e8f0;
+    overflow-y: auto;
+    padding: 12px 0;
+  }
+  .sidebar-title {
+    padding: 0 18px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .file-list { list-style: none; margin: 0; padding: 0; }
+  .file-item {
+    padding: 10px 18px;
+    cursor: pointer;
+    border-left: 3px solid transparent;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .file-item:hover { background: #eff6ff; }
+  .file-item.active { background: #e0e7ff; border-left-color: #3b82f6; }
+  .file-date {
+    font-size: 14px;
+    font-weight: 600;
+    color: #1e293b;
+    font-variant-numeric: tabular-nums;
+  }
+  .file-meta {
+    margin-top: 2px;
+    font-size: 11px;
+    color: #64748b;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .content {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    background: #fff;
+  }
+
+  .toolbar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 12px 16px;
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  .toolbar input[type="text"] {
+    flex: 1 1 240px;
+    min-width: 180px;
+    padding: 7px 12px;
+    font-size: 13px;
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    outline: none;
+  }
+  .toolbar input[type="text"]:focus { border-color: #3b82f6; }
+  .stats {
+    margin-left: auto;
+    font-size: 12px;
+    color: #64748b;
+    font-variant-numeric: tabular-nums;
+  }
+
+  button {
+    padding: 7px 14px;
+    font-size: 13px;
+    background: #f1f5f9;
+    color: #1e293b;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  button:hover:not(:disabled) { background: #e2e8f0; }
+  button:disabled { opacity: 0.45; cursor: not-allowed; }
+  button.primary { background: #3b82f6; color: #fff; border-color: #3b82f6; }
+  button.primary:hover:not(:disabled) { background: #2563eb; }
+
+  .pane {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    background: #ffffff;
+    color: #1e293b;
+    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    font-size: 12.5px;
+    line-height: 1.55;
+    padding: 8px 0;
+  }
+  .line {
+    display: flex;
+    align-items: flex-start;
+    padding: 1px 16px;
+  }
+  .line:hover { background: #f8fafc; }
+  .lineno {
+    flex-shrink: 0;
+    width: 56px;
+    text-align: right;
+    margin-right: 14px;
+    color: #64748b;
+    user-select: none;
+    font-variant-numeric: tabular-nums;
+  }
+  .text {
+    flex: 1 1 auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+  .level-error .text { color: #ef4444; }
+  .level-warn  .text { color: #f59e0b; }
+  .level-info  .text { color: #2563eb; }
+
+  .empty {
+    text-align: center;
+    padding: 60px 20px;
+    color: #94a3b8;
+    font-size: 14px;
+  }
+  .loadmore { text-align: center; padding: 12px 16px; }
+  .end {
+    text-align: center;
+    padding: 12px 0;
+    font-size: 12px;
+    color: #64748b;
+  }
+
+  /* 适配窄屏（手机/平板） */
+  @media (max-width: 768px) {
+    .layout { flex-direction: column; }
+    .sidebar {
+      width: 100%;
+      max-height: 200px;
+      border-right: none;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    header { padding: 12px 16px; }
+    header h1 { font-size: 16px; }
+    .toolbar { padding: 10px; }
+    .stats { width: 100%; margin-left: 0; }
+  }
+</style>
+</head>
+<body>
+  <header>
+    <h1>应用日志</h1>
+    <span class="subtitle">clouddrive-companion-*.log</span>
+    <div class="actions">
+      <button id="btn-refresh" title="刷新当前文件">🔄 刷新</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="sidebar-title" style="display:flex; justify-content:space-between; align-items:center;">
+        <span>日志文件 <span id="file-count">(0)</span></span>
+        <button id="btn-batch-delete" title="批量删除" style="padding: 2px 6px; font-size: 11px; margin-right: 8px;">🗑️ 删除选中</button>
+      </div>
+      <ul id="file-list" class="file-list"></ul>
+    </aside>
+
+    <section class="content">
+      <div class="toolbar">
+        <input id="kw-input" type="text" placeholder="按关键字过滤（大小写不敏感，例: ERROR）" />
+        <button id="btn-apply" class="primary">查询</button>
+        <button id="btn-reset">重置</button>
+        <span class="stats" id="stats"></span>
+      </div>
+      <div id="pane" class="pane">
+        <div class="empty">请选择左侧的日志文件</div>
+      </div>
+    </section>
+  </div>
+
+<script>
+(function () {
+  'use strict';
+
+  const PAGE_SIZE = 200;
+
+  const state = {
+    files: [],
+    selected: null,    // file info
+    lines: [],
+    nextOffset: 0,
+    hasMore: false,
+    keyword: '',
+    loading: false,
+  };
+
+  const $ = (id) => document.getElementById(id);
+  const fileList = $('file-list');
+  const fileCount = $('file-count');
+  const pane = $('pane');
+  const stats = $('stats');
+  const kwInput = $('kw-input');
+  const btnApply = $('btn-apply');
+  const btnReset = $('btn-reset');
+  const btnRefresh = $('btn-refresh');
+  const btnBatchDelete = $('btn-batch-delete');
+
+  function formatSize(bytes) {
+    if (!bytes || bytes <= 0) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(1024));
+    return (bytes / Math.pow(1024, i)).toFixed(2) + ' ' + units[i];
+  }
+
+  function formatTime(ms) {
+    if (!ms) return '';
+    const d = new Date(ms);
+    const pad = (n) => String(n).padStart(2, '0');
+    return pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+  }
+
+  function lineLevelClass(line) {
+    if (/\b(ERROR|FATAL|严重错误|panic|致命)/i.test(line)) return 'level-error';
+    if (/\b(WARN|警告|Warning)/i.test(line)) return 'level-warn';
+    if (/\b(INFO)/i.test(line)) return 'level-info';
+    return '';
+  }
+
+  function escapeHtml(s) {
+    return s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+  }
+
+  async function loadFiles() {
+    try {
+      const resp = await fetch('/app-logs/list');
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      const files = await resp.json();
+      state.files = Array.isArray(files) ? files : [];
+      renderFileList();
+      // 默认选中最新一个
+      if (state.files.length && !state.selected) {
+        await selectFile(state.files[0]);
+      } else if (!state.files.length) {
+        pane.innerHTML = '<div class="empty">暂无日志文件</div>';
+      }
+    } catch (err) {
+      console.error('加载日志文件列表失败', err);
+      pane.innerHTML = '<div class="empty">加载日志列表失败：' + escapeHtml(err.message) + '</div>';
+    }
+  }
+
+  function renderFileList() {
+    fileCount.textContent = '(' + state.files.length + ')';
+    fileList.innerHTML = '';
+    state.files.forEach((f) => {
+      const li = document.createElement('li');
+      li.className = 'file-item' + (state.selected && state.selected.name === f.name ? ' active' : '');
+      li.style.display = 'flex';
+      li.style.alignItems = 'center';
+      li.style.gap = '8px';
+
+      const chk = document.createElement('input');
+      chk.type = 'checkbox';
+      chk.className = 'file-chk';
+      chk.value = f.name;
+      chk.onclick = (e) => e.stopPropagation();
+
+      const info = document.createElement('div');
+      info.style.flex = '1';
+      info.style.minWidth = '0';
+      info.innerHTML =
+        '<div class="file-date" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escapeHtml(f.date) + '</div>' +
+        '<div class="file-meta">' + formatSize(f.size) + ' · ' + formatTime(f.modifiedMs) + '</div>';
+
+      const delBtn = document.createElement('button');
+      delBtn.textContent = '🗑️';
+      delBtn.title = '删除';
+      delBtn.style.padding = '2px 4px';
+      delBtn.style.fontSize = '12px';
+      delBtn.style.background = 'transparent';
+      delBtn.style.border = 'none';
+      delBtn.style.cursor = 'pointer';
+      delBtn.onclick = (e) => {
+        e.stopPropagation();
+        deleteLogs([f.name]);
+      };
+
+      li.appendChild(chk);
+      li.appendChild(info);
+      li.appendChild(delBtn);
+
+      li.addEventListener('click', () => selectFile(f));
+      fileList.appendChild(li);
+    });
+  }
+
+  async function deleteLogs(names) {
+    if (!names.length) return;
+    if (!confirm(`确定要删除 ${names.length} 个日志文件吗？\n注意：如果文件被其他进程占用可能无法完全删除。`)) return;
+    try {
+      const resp = await fetch('/app-logs/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(names)
+      });
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      
+      if (state.selected && names.includes(state.selected.name)) {
+          state.selected = null;
+          state.lines = [];
+          state.nextOffset = 0;
+          state.hasMore = false;
+          pane.innerHTML = '<div class="empty">请选择左侧的日志文件</div>';
+      }
+      await loadFiles();
+    } catch (err) {
+      alert('删除失败: ' + err.message);
+    }
+  }
+
+  async function selectFile(f) {
+    if (state.selected && state.selected.name === f.name) return;
+    state.selected = f;
+    state.lines = [];
+    state.nextOffset = 0;
+    state.hasMore = false;
+    renderFileList();
+    await fetchPage(true);
+  }
+
+  async function fetchPage(reset) {
+    if (!state.selected || state.loading) return;
+    state.loading = true;
+    updateButtons();
+    try {
+      const offset = reset ? 0 : state.nextOffset;
+      const params = new URLSearchParams({
+        name: state.selected.name,
+        offset: String(offset),
+        size: String(PAGE_SIZE),
+        keyword: state.keyword || '',
+      });
+      const resp = await fetch('/app-logs/read?' + params.toString());
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      const result = await resp.json();
+      const newLines = result.lines || [];
+      const prevCount = state.lines.length;
+      if (reset) {
+        state.lines = newLines;
+      } else {
+        state.lines = state.lines.concat(newLines);
+      }
+      state.nextOffset = result.nextOffset || 0;
+      state.hasMore = !!result.hasMore;
+      if (result.totalSize) {
+        state.selected = Object.assign({}, state.selected, { size: result.totalSize });
+        const idx = state.files.findIndex((x) => x.name === state.selected.name);
+        if (idx >= 0) state.files[idx] = state.selected;
+      }
+      if (reset) {
+        renderLines();
+      } else {
+        appendLines(newLines, prevCount);
+      }
+    } catch (err) {
+      console.error('读取日志失败', err);
+      pane.innerHTML = '<div class="empty">读取日志失败：' + escapeHtml(err.message) + '</div>';
+    } finally {
+      state.loading = false;
+      updateButtons();
+      updateFooter();
+    }
+  }
+
+  // 完整重建（仅在 reset / 首次加载时使用）
+  function renderLines() {
+    updateStats();
+    if (!state.selected) return;
+
+    if (!state.lines.length && !state.loading) {
+      pane.innerHTML = '<div class="empty">' + (state.keyword ? '没有匹配的日志行' : '日志为空') + '</div>';
+      return;
+    }
+
+    const frag = document.createDocumentFragment();
+    state.lines.forEach((line, idx) => {
+      frag.appendChild(createLineEl(line, idx));
+    });
+
+    // 底部占位区域（hasMore 指示器 / 到达文件起点提示）
+    frag.appendChild(createFooter());
+
+    pane.innerHTML = '';
+    pane.appendChild(frag);
+  }
+
+  // 增量追加（加载更多时使用，保留滚动位置）
+  function appendLines(newLines, startIndex) {
+    updateStats();
+    // 移除旧的 footer（loadmore / end 提示）
+    const oldFooter = pane.querySelector('.loadmore, .end');
+    if (oldFooter) oldFooter.remove();
+
+    const frag = document.createDocumentFragment();
+    newLines.forEach((line, i) => {
+      frag.appendChild(createLineEl(line, startIndex + i));
+    });
+    frag.appendChild(createFooter());
+    pane.appendChild(frag);
+  }
+
+  function createLineEl(line, idx) {
+    const div = document.createElement('div');
+    div.className = 'line ' + lineLevelClass(line);
+    div.innerHTML =
+      '<span class="lineno">' + (idx + 1) + '</span>' +
+      '<span class="text">' + escapeHtml(line) + '</span>';
+    return div;
+  }
+
+  function createFooter() {
+    if (state.hasMore) {
+      const more = document.createElement('div');
+      more.className = 'loadmore';
+      more.innerHTML = '<span style="color:#94a3b8;font-size:13px;">' +
+        (state.loading ? '加载中…' : '滚动加载更多') + '</span>';
+      return more;
+    }
+    if (state.lines.length) {
+      const end = document.createElement('div');
+      end.className = 'end';
+      end.textContent = '— 已经到达文件起点 —';
+      return end;
+    }
+    return document.createDocumentFragment(); // empty
+  }
+
+  function updateFooter() {
+    const oldFooter = pane.querySelector('.loadmore, .end');
+    if (oldFooter) {
+      const newFooter = createFooter();
+      oldFooter.replaceWith(newFooter);
+    }
+  }
+
+  function updateStats() {
+    if (!state.selected) return;
+    stats.textContent =
+      state.selected.name + ' · ' + formatSize(state.selected.size) +
+      (state.lines.length ? ' · 已加载 ' + state.lines.length + ' 行' : '');
+  }
+
+  function updateButtons() {
+    btnApply.disabled = state.loading;
+    btnReset.disabled = state.loading;
+    btnRefresh.disabled = state.loading || !state.selected;
+  }
+
+  function applyKeyword() {
+    state.keyword = (kwInput.value || '').trim();
+    state.lines = [];
+    state.nextOffset = 0;
+    state.hasMore = false;
+    fetchPage(true);
+  }
+
+  function resetKeyword() {
+    kwInput.value = '';
+    state.keyword = '';
+    state.lines = [];
+    state.nextOffset = 0;
+    state.hasMore = false;
+    fetchPage(true);
+  }
+
+  function reload() {
+    if (!state.selected) return;
+    state.lines = [];
+    state.nextOffset = 0;
+    state.hasMore = false;
+    fetchPage(true);
+  }
+
+  // 滚动到底部自动加载更多
+  let scrollTimer = null;
+  pane.addEventListener('scroll', function () {
+    if (!state.hasMore || state.loading) return;
+    if (scrollTimer) clearTimeout(scrollTimer);
+    scrollTimer = setTimeout(function () {
+      if (pane.scrollTop + pane.clientHeight >= pane.scrollHeight - 200) {
+        fetchPage(false);
+      }
+    }, 80);
+  });
+
+  btnApply.addEventListener('click', applyKeyword);
+  btnReset.addEventListener('click', resetKeyword);
+  btnRefresh.addEventListener('click', reload);
+  btnBatchDelete.addEventListener('click', () => {
+    const chks = document.querySelectorAll('.file-chk:checked');
+    const names = Array.from(chks).map(c => c.value);
+    if (!names.length) {
+        alert('请先勾选要删除的日志文件');
+        return;
+    }
+    deleteLogs(names);
+  });
+  kwInput.addEventListener('keyup', (e) => {
+    if (e.key === 'Enter') applyKeyword();
+  });
+
+  loadFiles();
+})();
+</script>
+</body>
+</html>

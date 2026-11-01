@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PNA / LNA 本地访问拦截检测</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: "Microsoft YaHei", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    margin: 0; padding: 24px; background: #f5f6f8; color: #1f2329; line-height: 1.6;
+  }
+  .wrap { max-width: 920px; margin: 0 auto; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: #646a73; font-size: 13px; margin-bottom: 20px; }
+  .card { background: #fff; border-radius: 10px; padding: 20px 22px; margin-bottom: 16px;
+          box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+  .row { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; }
+  label { font-size: 13px; color: #434a54; }
+  input[type=text] { padding: 8px 10px; border: 1px solid #d0d3d6; border-radius: 6px;
+                     font-size: 14px; width: 220px; }
+  button { cursor: pointer; border: none; border-radius: 6px; padding: 10px 20px;
+           font-size: 15px; font-weight: 600; }
+  .btn-primary { background: #3370ff; color: #fff; }
+  .btn-primary:hover { background: #245bdb; }
+  .btn-ghost { background: #f0f1f2; color: #1f2329; padding: 8px 14px; font-size: 13px; }
+  .btn-ghost:hover { background: #e3e5e8; }
+  .verdict { font-size: 26px; font-weight: 800; padding: 22px; border-radius: 10px;
+             text-align: center; margin-bottom: 4px; transition: all .2s; }
+  .v-pending { background: #eef0f3; color: #8a9099; }
+  .v-pass    { background: #e7f7ec; color: #18a058; border: 2px solid #18a058; }
+  .v-block   { background: #fde9e9; color: #d4380d; border: 2px solid #d4380d; }
+  .v-cors    { background: #fff7e6; color: #d48806; border: 2px solid #d48806; }
+  .v-warn    { background: #fff7e6; color: #d48806; border: 2px solid #d48806; }
+  .verdict-desc { text-align: center; color: #434a54; font-size: 14px; margin-top: 8px; min-height: 20px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #eef0f2; vertical-align: top; }
+  th { color: #646a73; font-weight: 600; width: 200px; }
+  .tag { display: inline-block; padding: 1px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; }
+  .tag-ok { background: #e7f7ec; color: #18a058; }
+  .tag-no { background: #fde9e9; color: #d4380d; }
+  .tag-na { background: #eef0f3; color: #8a9099; }
+  pre { background: #1f2329; color: #d6dae0; padding: 14px; border-radius: 8px;
+        overflow: auto; font-size: 12px; line-height: 1.5; max-height: 320px; }
+  .hint { font-size: 12px; color: #8a9099; margin-top: 6px; }
+  .step { font-size: 13px; color: #434a54; margin: 4px 0; }
+  code { background: #f0f1f2; padding: 1px 6px; border-radius: 4px; font-size: 12px; }
+  h2 { font-size: 16px; margin: 0 0 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>PNA / LNA 本地网络访问拦截检测</h1>
+  <div class="sub">
+    检测当前浏览器是否拦截「公网页面 → 本地伴侣 (loopback)」请求。
+    本页面应通过 <b>公网/局域网 IP</b> 访问（不要用 localhost 打开，否则结果无效）。
+  </div>
+
+  <!-- 配置 -->
+  <div class="card">
+    <div class="row">
+      <div>
+        <label>本地伴侣端口</label><br>
+        <input type="text" id="port" value="34567">
+      </div>
+      <div>
+        <label>探测路径</label><br>
+        <input type="text" id="path" value="/pna-probe">
+      </div>
+      <div>
+        <label>唤起协议 (URI Scheme)</label><br>
+        <input type="text" id="scheme" value="my-clouddrive">
+      </div>
+      <div style="flex:1"></div>
+      <div style="align-self:flex-end">
+        <button class="btn-primary" id="runBtn" onclick="runAll()">▶ 一键检测</button>
+      </div>
+    </div>
+    <div class="hint" id="originHint"></div>
+  </div>
+
+  <!-- 客户端检测 / 唤起 -->
+  <div class="card">
+    <h2>客户端状态</h2>
+    <div class="row">
+      <div id="clientStatus" style="font-size:15px;font-weight:600;color:#8a9099">○ 未检测</div>
+      <div style="flex:1"></div>
+      <button class="btn-ghost" id="launchBtn" onclick="launchClient()">⮕ 手动唤起客户端</button>
+    </div>
+    <div class="hint" id="clientHint">检测客户端是否在运行；若未运行将尝试通过 <code id="schemeHint">my-clouddrive://</code> 协议拉起。</div>
+  </div>
+
+  <!-- 结论 -->
+  <div class="card">
+    <div class="verdict v-pending" id="verdict">等待检测…</div>
+    <div class="verdict-desc" id="verdictDesc"></div>
+  </div>
+
+  <!-- 前置确认 -->
+  <div class="card">
+    <h2>检测前请确认</h2>
+    <div class="step">1. 本机已运行「网盘伴侣」客户端（或测试探测端点已开启）。</div>
+    <div class="step">2. 用浏览器<b>新标签页</b>直接打开 <code id="directLink">http://localhost:34567/pna-probe</code>
+        ，能看到一段 JSON 即说明探测端点正常（这是 loopback→loopback，永不被拦）。</div>
+    <div class="step">3. 回到本页面（必须是通过公网/局域网 IP 打开的），点击「一键检测」。</div>
+    <div class="hint">若第 2 步打不开，请先解决端点未启动问题，否则检测会误判为「被拦截」。</div>
+  </div>
+
+  <!-- 明细 -->
+  <div class="card">
+    <h2>检测明细</h2>
+    <table id="detailTable">
+      <tr><th>页面来源 (Origin)</th><td id="d-origin">—</td></tr>
+      <tr><th>地址空间判定</th><td id="d-space">—</td></tr>
+      <tr><th>浏览器 / 内核</th><td id="d-browser">—</td></tr>
+      <tr><th>客户端状态</th><td id="d-client">—</td></tr>
+      <tr><th>① 基线：页面网络可用</th><td id="d-baseline">—</td></tr>
+      <tr><th>② CORS 探测 (可读 JSON)</th><td id="d-cors">—</td></tr>
+      <tr><th>③ no-cors 探测 (是否到达)</th><td id="d-nocors">—</td></tr>
+      <tr><th>④ PNA 预检观测</th><td id="d-pna-pf">—</td></tr>
+    </table>
+  </div>
+
+  <!-- 原因分析 -->
+  <div class="card">
+    <h2>放行 / 拦截 原因分析</h2>
+    <div id="d-reason" style="font-size:14px;line-height:1.7">—</div>
+  </div>
+
+  <!-- 报告 -->
+  <div class="card">
+    <h2>报告 <span style="font-weight:400;font-size:12px;color:#8a9099">（可复制/下载，回填到统计表）</span></h2>
+    <div class="row" style="margin-bottom:12px">
+      <button class="btn-ghost" onclick="copyReport()">📋 复制报告</button>
+      <button class="btn-ghost" onclick="downloadReport()">⬇ 下载报告 (.json)</button>
+    </div>
+    <pre id="report">（检测后在此生成）</pre>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---- 工具 ----
+function $(id){ return document.getElementById(id); }
+function localBase(){
+  return "http://localhost:" + ($("port").value.trim() || "34567");
+}
+function probeUrl(){
+  var p = $("path").value.trim() || "/pna-probe";
+  if (p[0] !== "/") p = "/" + p;
+  return localBase() + p;
+}
+function probeUrlWithId(id){
+  var u = probeUrl();
+  return u + (u.indexOf("?") >= 0 ? "&" : "?") + "probe=" + encodeURIComponent(id);
+}
+function genProbeId(){
+  return "p" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
+function pingUrl(){
+  return localBase() + "/ping";
+}
+function schemeName(){
+  return ($("scheme").value.trim() || "my-clouddrive");
+}
+function tag(ok, txt){
+  var cls = ok === true ? "tag-ok" : (ok === false ? "tag-no" : "tag-na");
+  return '<span class="tag '+cls+'">'+txt+'</span>';
+}
+
+// 带超时的 fetch
+function fetchTimeout(url, opts, ms){
+  opts = opts || {};
+  return new Promise(function(resolve, reject){
+    var done = false;
+    var t = setTimeout(function(){
+      if (done) return;
+      done = true;
+      reject(new Error("timeout"));
+    }, ms);
+    fetch(url, opts).then(function(r){
+      if (done) return;
+      done = true; clearTimeout(t); resolve(r);
+    }).catch(function(e){
+      if (done) return;
+      done = true; clearTimeout(t); reject(e);
+    });
+  });
+}
+
+// ---- 客户端检测 / 唤起（复刻生产页 UploadComponent.vue 的逻辑）----
+function setClientStatus(state, text, color){
+  var el = $("clientStatus");
+  el.textContent = text;
+  el.style.color = color || "#8a9099";
+  el.setAttribute("data-state", state);
+}
+
+// 检测客户端是否在运行：cors ping。
+// 注意：ping 本身也是"公网->loopback"请求，同样会被 PNA 拦。
+// 所以 ping 失败 ≠ 客户端没开，可能是被拦。这里再补一个 no-cors 兜底判断"网络层是否可达"。
+function detectClient(){
+  return fetchTimeout(pingUrl(), { method: "GET", mode: "cors", cache: "no-store" }, 1500)
+    .then(function(r){ return r.ok ? "running" : "stopped"; })
+    .catch(function(){ return "unknown"; });
+}
+
+// 通过 URI scheme 唤起客户端（OS 级协议处理，不受 PNA 影响），
+// 然后进入 ping 等待循环（最多 ~6 秒）。
+function launchClient(){
+  return new Promise(function(resolve){
+    setClientStatus("launching", "⟳ 正在唤起客户端…", "#d48806");
+    try {
+      // 用隐藏 iframe 触发协议，避免直接改 location 导致页面跳走/留下报错。
+      var ifr = document.createElement("iframe");
+      ifr.style.display = "none";
+      ifr.src = schemeName() + "://select-files";
+      document.body.appendChild(ifr);
+      setTimeout(function(){ try { document.body.removeChild(ifr); } catch(e){} }, 1500);
+    } catch (e) {
+      // 兜底：直接跳协议
+      try { window.location.href = schemeName() + "://select-files"; } catch(e2){}
+    }
+
+    var attempts = 0, maxAttempts = 12; // 12 * 500ms = 6s
+    (function loop(){
+      setTimeout(function(){
+        detectClient().then(function(st){
+          if (st === "running"){
+            setClientStatus("running", "● 客户端运行中", "#18a058");
+            resolve("running");
+            return;
+          }
+          attempts++;
+          if (attempts >= maxAttempts){
+            // 超时仍 ping 不通：可能没装/没起，也可能 ping 被 PNA 拦。
+            setClientStatus("unknown", "? 未能确认（ping 不通，可能未安装或被 PNA 拦截）", "#d48806");
+            resolve("unknown");
+            return;
+          }
+          setClientStatus("launching", "⟳ 等待客户端就绪… (" + attempts + "/" + maxAttempts + ")", "#d48806");
+          loop();
+        });
+      }, 500);
+    })();
+  });
+}
+
+// 确保客户端可用：先检测，未运行则唤起等待。返回最终状态。
+function ensureClient(){
+  setClientStatus("checking", "⟳ 检测客户端中…", "#d48806");
+  return detectClient().then(function(st){
+    if (st === "running"){
+      setClientStatus("running", "● 客户端运行中", "#18a058");
+      return "running";
+    }
+    // 未检测到，尝试唤起
+    return launchClient();
+  });
+}
+
+// 解析浏览器与版本
+function detectBrowser(){
+  var ua = navigator.userAgent;
+  var name = "未知", ver = "?";
+  // Edge (Chromium) 优先于 Chrome 判定
+  var m;
+  if ((m = ua.match(/Edg\/([\d.]+)/)))      { name = "Edge";   ver = m[1]; }
+  else if ((m = ua.match(/OPR\/([\d.]+)/)))  { name = "Opera";  ver = m[1]; }
+  else if ((m = ua.match(/Chrome\/([\d.]+)/))){ name = "Chrome"; ver = m[1]; }
+  else if ((m = ua.match(/Firefox\/([\d.]+)/))){ name = "Firefox"; ver = m[1]; }
+  else if ((m = ua.match(/Version\/([\d.]+).*Safari/))){ name = "Safari"; ver = m[1]; }
+  var major = parseInt((ver.split(".")[0] || "0"), 10);
+  return { name: name, version: ver, major: major, ua: ua,
+           secureContext: (typeof isSecureContext !== "undefined") ? isSecureContext : null };
+}
+
+// 判定页面地址空间（粗略：仅用于提示，真实判定在浏览器内核）
+function classifyOrigin(){
+  var host = location.hostname;
+  var proto = location.protocol;
+  if (host === "localhost" || host === "127.0.0.1" || host === "::1" || /^127\./.test(host)) {
+    return { space: "loopback(本机)", warn: true,
+             msg: "⚠ 当前用 localhost/127.0.0.1 打开，无法复现公网→本地拦截，结果无效！请改用公网或局域网 IP 打开本页。" };
+  }
+  if (/^10\./.test(host) || /^192\.168\./.test(host) ||
+      /^172\.(1[6-9]|2\d|3[01])\./.test(host) || /\.local$/.test(host)) {
+    return { space: "private(局域网)", warn: false,
+             msg: "页面来自局域网 IP（private 空间），打 loopback 同样会触发 PNA，可用于检测。" };
+  }
+  return { space: "public(公网)", warn: false,
+           msg: "页面来自公网地址（public 空间），最贴近真实业务场景。" + (proto==="https:"?" 且为 HTTPS 安全上下文。":" 且为 HTTP 非安全上下文。") };
+}
+
+var lastReport = null;
+
+// ---- 放行 / 拦截 原因分析 ----
+// 核心依据：
+//   pnaObserved=true  浏览器发了 PNA 预检 -> 它"在执行"PNA，放行是靠服务端头/策略
+//   pnaObserved=false 浏览器没发预检     -> 它对该组合"未启用"拦截
+function analyzeReason(verdict, cors, nocors, pnaObserved, oc, br){
+  var spaceNote = (oc.space.indexOf("private") === 0)
+      ? "（注意：本页是局域网 private 空间，与真实公网 public 略有差异；建议再用真实公网地址复测）"
+      : "";
+
+  if (verdict === "PASS") {
+    if (pnaObserved === true) {
+      // 放行原因 B：浏览器执行了 PNA，但被服务端的 Allow-Private-Network 头放行
+      return {
+        code: "PASS_BY_PREFLIGHT_HEADER",
+        text: "放行原因B：浏览器已启用 PNA 并发出了预检，因本地端点正确返回了 Access-Control-Allow-Private-Network: true 头而被放行。",
+        html: tag(true,"靠响应头放行") +
+          " 浏览器<b>已启用</b> PNA（发了预检 OPTIONS），是本地端点回了 " +
+          "<code>Access-Control-Allow-Private-Network: true</code> 才通过。<br>" +
+          "<b style='color:#d48806'>⚠ 重要：</b>这意味着你现场<b>真实上传端点的每一个接口都必须返回该头</b>，" +
+          "否则照样会被拦。请确认生产端点 CORS 配置已覆盖此头。" + spaceNote
+      };
+    }
+    if (pnaObserved === false) {
+      // 放行原因 A：浏览器压根没启用拦截
+      return {
+        code: "PASS_NO_ENFORCEMENT",
+        text: "放行原因A：浏览器未对该来源/地址空间组合启用 PNA 拦截（未发出预检），与服务端响应头无关。",
+        html: tag(true,"浏览器未启用拦截") +
+          " 浏览器<b>没有发</b> PNA 预检，说明此版本/此配置对该组合<b>根本不拦截</b>，放行与服务端头无关（属于「情况1」）。<br>" +
+          "可能因为：① 该 Chrome/Edge 版本尚未强制 PNA/LNA；② 已通过企业策略豁免（情况2，策略已生效）；③ 命中其他白名单。" + spaceNote
+      };
+    }
+    // 拿不到 body（理论上 PASS 时一定有 body，这里兜底）
+    return {
+      code: "PASS_UNKNOWN_REASON",
+      text: "已放行，但未能从端点回报判断具体原因。",
+      html: tag(null,"原因未知") + " 已放行但未读到端点回报，无法区分是版本不拦还是靠响应头放行。" + spaceNote
+    };
+  }
+
+  if (verdict === "BLOCKED") {
+    return {
+      code: "BLOCKED_BY_PNA",
+      text: "拦截原因：浏览器在「" + oc.space + " → loopback」方向上阻断了请求。" +
+            "因非安全上下文（HTTP）下浏览器直接静默拒绝，连预检都不发，服务端响应头无法挽救。",
+      html: tag(false,"被浏览器阻断") +
+        " 请求在<b>浏览器侧</b>就被拒（cors 与 no-cors 均失败）。<br>" +
+        "典型机理：当前页面是<b>非安全上下文（HTTP）</b>，Chrome/Edge 对「更公开→更私有」的本地请求<b>直接静默拒绝</b>，" +
+        "不发预检、服务端头也救不了。<br>解决：写注册表策略放行 + 完全重启浏览器后复测（区分情况2/情况3）。" + spaceNote
+    };
+  }
+
+  if (verdict === "CORS_ISSUE") {
+    return {
+      code: "NOT_PNA_CORS",
+      text: "并非 PNA：请求已到达本地服务，但 CORS 响应头不被接受。",
+      html: tag(null,"非PNA") + " 请求其实<b>到达了</b>本地服务（no-cors 成功），只是 CORS 头问题，与 PNA 无关。"
+    };
+  }
+
+  return { code: "NA", text: "无原因分析（检测无效或网络异常）。", html: tag(null,"—") + " 检测无效或网络异常，无原因分析。" };
+}
+
+function runAll(){
+  $("runBtn").disabled = true;
+  $("runBtn").textContent = "检测中…";
+  reset();
+
+  // 先确保客户端在运行（未运行则通过 URI scheme 唤起并等待），再做 PNA 探测。
+  ensureClient().then(function(clientState){
+    doProbes(clientState);
+  });
+}
+
+function doProbes(clientState){
+  var br = detectBrowser();
+  var oc = classifyOrigin();
+
+  $("d-origin").textContent = location.origin;
+  $("d-space").innerHTML = oc.space + (oc.warn ? " " + tag(false,"无效") : "");
+  $("originHint").textContent = oc.msg;
+  $("originHint").style.color = oc.warn ? "#d4380d" : "#8a9099";
+  $("d-browser").textContent = br.name + " " + br.version +
+        "（安全上下文 secureContext=" + br.secureContext + "）";
+  var clientTxt = { running: tag(true,"运行中")+" ping 通过",
+                    stopped: tag(false,"未运行")+" 明确收到拒绝",
+                    unknown: tag(null,"未确认")+" ping 不通（未装/未起，或 ping 被 PNA 拦）" }[clientState] || clientState;
+  $("d-client").innerHTML = clientTxt;
+
+  var result = {
+    timestamp: new Date().toISOString(),
+    pageOrigin: location.origin,
+    addressSpace: oc.space,
+    browser: br.name, browserVersion: br.version, browserMajor: br.major,
+    secureContext: br.secureContext,
+    userAgent: br.ua,
+    probeTarget: probeUrl(),
+    clientState: clientState,
+    tests: {}, verdict: "", verdictDesc: ""
+  };
+
+  // ① 基线：同源 HEAD（页面自身）。证明 fetch / 网络本身可用。
+  var baseline = fetchTimeout(location.href, { method: "GET", cache: "no-store" }, 8000)
+    .then(function(){ return true; }).catch(function(){ return false; });
+
+  // ② CORS 探测：能读到 JSON => 完全通过。
+  //    带唯一 probeId，便于 Go 端把"预检 OPTIONS"和这次 GET 关联，
+  //    从而回报浏览器是否真的发了 PNA 预检（区分放行原因 A/B）。
+  var probeId = genProbeId();
+  result.probeId = probeId;
+  var corsTargetUrl = probeUrlWithId(probeId);
+  var t0 = performance.now();
+  var corsTest = fetchTimeout(corsTargetUrl, { method: "GET", mode: "cors", cache: "no-store" }, 8000)
+    .then(function(r){ return r.json().then(function(j){ return { ok:true, ms: Math.round(performance.now()-t0), body:j }; }); })
+    .catch(function(e){ return { ok:false, ms: Math.round(performance.now()-t0), err: String(e && e.message || e) }; });
+
+  // ③ no-cors 探测：opaque 成功 => 请求确实到达了服务端（区分 PNA 拦截 vs CORS 头问题）
+  var t1 = performance.now();
+  var noCorsTest = fetchTimeout(probeUrl(), { method: "GET", mode: "no-cors", cache: "no-store" }, 8000)
+    .then(function(r){ return { ok:true, ms: Math.round(performance.now()-t1), type: r.type }; })
+    .catch(function(e){ return { ok:false, ms: Math.round(performance.now()-t1), err: String(e && e.message || e) }; });
+
+  Promise.all([baseline, corsTest, noCorsTest]).then(function(arr){
+    var base = arr[0], cors = arr[1], nocors = arr[2];
+
+    result.tests.baseline = base;
+    result.tests.cors = cors;
+    result.tests.noCors = nocors;
+
+    $("d-baseline").innerHTML = base ? tag(true,"通过")+" 页面所在网络与 fetch 可用"
+                                     : tag(false,"失败")+" 连页面自身都拉不动，网络异常";
+    $("d-cors").innerHTML = cors.ok
+        ? tag(true,"成功")+" 读到 JSON ("+cors.ms+"ms)"
+        : tag(false,"失败")+" "+cors.err+" ("+cors.ms+"ms)";
+    $("d-nocors").innerHTML = nocors.ok
+        ? tag(true,"到达")+" opaque 响应 ("+nocors.ms+"ms)"
+        : tag(false,"未到达")+" "+nocors.err+" ("+nocors.ms+"ms)";
+
+    // ---- 判定逻辑 ----
+    var v = $("verdict"), vd = $("verdictDesc"), cls, txt, desc;
+
+    // 从 Go 端回报中取出"是否观测到 PNA 预检"
+    var pnaObserved = null, pnaAgeMs = null;
+    if (cors.ok && cors.body) {
+      pnaObserved = !!cors.body.pnaPreflightObserved;
+      pnaAgeMs = cors.body.pnaPreflightAgeMs;
+    }
+
+    if (oc.warn) {
+      cls="v-warn"; txt="⚠ 检测无效"; result.verdict="INVALID";
+      desc="本页通过 localhost/127.0.0.1 打开，无法复现公网→本地场景。请改用公网或局域网 IP 重新打开本页。";
+    } else if (!base) {
+      cls="v-warn"; txt="⚠ 无法判定"; result.verdict="UNKNOWN";
+      desc="基线探测失败：页面所在网络异常，请检查网络后重试。";
+    } else if (cors.ok) {
+      cls="v-pass"; txt="✓ 未被拦截"; result.verdict="PASS";
+      desc="浏览器允许本页直接访问本地伴侣（属于「情况1」可直接用，或「情况2」策略已生效）。";
+    } else if (nocors.ok) {
+      // 请求到达了服务端但 cors 读不到 => CORS 头问题，而非 PNA 拦截
+      cls="v-cors"; txt="△ 非PNA：CORS问题"; result.verdict="CORS_ISSUE";
+      desc="请求实际已到达本地服务（no-cors 成功），但 CORS 响应头不被接受。这不是 PNA 拦截，请检查探测端点的 CORS 头。";
+    } else {
+      // cors 和 no-cors 都失败 => 被 PNA 拦截，或端点未启动
+      if (clientState === "running") {
+        cls="v-block"; txt="✗ 被拦截 (PNA)"; result.verdict="BLOCKED";
+        desc="客户端确认在运行（ping 通过），但本页对本地端点的请求被浏览器阻断（属于「情况2/3」）。需要写注册表策略放行后重启浏览器再测。";
+      } else {
+        cls="v-block"; txt="✗ 被拦截 / 客户端未确认"; result.verdict="BLOCKED";
+        desc="本页访问本地伴侣的请求失败，且未能确认客户端在运行。请先确认客户端已启动（新标签打开 " + probeUrl() + " 能看到 JSON），再重测；若能直接打开 JSON 但本页失败，则确为 PNA 拦截。";
+      }
+    }
+    v.className = "verdict " + cls;
+    v.textContent = txt;
+    vd.textContent = desc;
+    result.verdictDesc = desc;
+
+    // ---- 放行/拦截 原因分析（核心新增）----
+    var reason = analyzeReason(result.verdict, cors, nocors, pnaObserved, oc, br);
+    result.pnaPreflightObserved = pnaObserved;
+    result.pnaPreflightAgeMs = pnaAgeMs;
+    result.reasonCode = reason.code;
+    result.reason = reason.text;
+    $("d-pna-pf").innerHTML = (pnaObserved === null)
+        ? tag(null,"未知")+" 未拿到端点回报（请求未读到 body）"
+        : (pnaObserved ? tag(true,"观测到")+" 浏览器发了 PNA 预检 OPTIONS"
+                       : tag(false,"未观测到")+" 浏览器未发 PNA 预检");
+    $("d-reason").innerHTML = reason.html;
+
+    lastReport = result;
+    $("report").textContent = JSON.stringify(result, null, 2);
+
+    $("runBtn").disabled = false;
+    $("runBtn").textContent = "▶ 重新检测";
+  });
+}
+
+function reset(){
+  ["d-baseline","d-cors","d-nocors","d-client","d-pna-pf"].forEach(function(id){ $(id).textContent="检测中…"; });
+  $("d-reason").textContent = "分析中…";
+  $("verdict").className = "verdict v-pending";
+  $("verdict").textContent = "检测中…";
+  $("verdictDesc").textContent = "";
+}
+
+function copyReport(){
+  if (!lastReport) { alert("请先执行检测"); return; }
+  var txt = $("report").textContent;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(txt).then(function(){ alert("报告已复制"); },
+                                            function(){ fallbackCopy(txt); });
+  } else { fallbackCopy(txt); }
+}
+function fallbackCopy(txt){
+  var ta = document.createElement("textarea");
+  ta.value = txt; document.body.appendChild(ta); ta.select();
+  try { document.execCommand("copy"); alert("报告已复制"); }
+  catch(e){ alert("复制失败，请手动选择文本复制"); }
+  document.body.removeChild(ta);
+}
+function downloadReport(){
+  if (!lastReport) { alert("请先执行检测"); return; }
+  var blob = new Blob([$("report").textContent], { type: "application/json" });
+  var a = document.createElement("a");
+  var stamp = new Date().toISOString().replace(/[:.]/g,"-");
+  a.href = URL.createObjectURL(blob);
+  a.download = "pna-report-" + (lastReport.browser||"x") + "-" + (lastReport.browserVersion||"x") + "-" + stamp + ".json";
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+}
+
+// ---- 初始化：支持 ?port= 与 ?path= 覆盖；刷新直链提示 ----
+(function init(){
+  var q = new URLSearchParams(location.search);
+  if (q.get("port")) $("port").value = q.get("port");
+  if (q.get("path")) $("path").value = q.get("path");
+  if (q.get("scheme")) $("scheme").value = q.get("scheme");
+  function syncLink(){
+    $("directLink").textContent = probeUrl();
+    $("schemeHint").textContent = schemeName() + "://";
+  }
+  $("port").addEventListener("input", syncLink);
+  $("path").addEventListener("input", syncLink);
+  $("scheme").addEventListener("input", syncLink);
+  syncLink();
+  var oc = classifyOrigin();
+  $("originHint").textContent = oc.msg;
+  $("originHint").style.color = oc.warn ? "#d4380d" : "#8a9099";
+})();
+</script>
+</body>
+</html>
