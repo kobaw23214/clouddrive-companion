@@ -47,14 +47,14 @@ CloudDrive Companion 是一个 Windows 桌面应用程序,用于辅助**网页�
 ### 自行实现的文件选择器
 
 <p align="center">
-  <img src="docs/screenshots/file-selector.png" width="640" alt="Custom in-app file selector: browse, filter, check files, or open the native dialog">
+  <img src="docs/screenshots/dashboard.png" width="640" alt="Custom in-app file selector: browse, filter, check files, or open the native dialog">
 </p>
 
 ### 主面板与功能界面
 
 | 上传任务 | 主面板与诊断 |
 |:---:|:---:|
-| <img src="docs/screenshots/upload-tasks.png" width="380" alt="Upload task panel: resume, pause, retry, trace"><br>**上传任务面板** — 待续传/上传中/完成状态,批量暂停与重试 | <img src="docs/screenshots/dashboard.png" width="380" alt="Dashboard: network status, diagnostics and proxy settings"><br>**主面板 Dashboard** — 网络状态 / 网络诊断 / 代理设置(上传流量是否走系统代理) |
+| <img src="docs/screenshots/upload-tasks.png" width="380" alt="Upload task panel: resume, pause, retry, trace"><br>**上传任务面板** — 待续传/上传中/完成状态,批量暂停与重试 | <img src="docs/screenshots/file-selector.png" width="380" alt="Dashboard: network status, diagnostics and proxy settings"><br>**主面板 Dashboard** — 网络状态 / 网络诊断 / 代理设置(上传流量是否走系统代理) |
 | <img src="docs/screenshots/upload-progress.png" width="380" alt="Upload progress list with speed and status"><br>**上传进度** — 分片进度/速度/状态一览 | <img src="docs/screenshots/http-log-viewer.png" width="380" alt="HTTP request log viewer"><br>**HTTP 请求日志** — 逐请求查看 headers/body |
 | <img src="docs/screenshots/scan-progress-overlay.png" width="380" alt="Directory scan progress overlay"><br>**扫描进度浮层** — 海量文件遍历实时反馈 | <img src="docs/screenshots/tcp-connections.png" width="380" alt="TCP connections monitor"><br>**TCP 连接监控** — 含重试成功记录 |
 | <img src="docs/screenshots/task-trace-sequence.png" width="380" alt="Task tracing sequence diagram"><br>**任务时序追踪** — 浏览器/客户端/后端全链路 | <img src="docs/screenshots/port-usage.png" width="380" alt="Port usage viewer"><br>**端口占用** — 监听端口与占用进程 |
