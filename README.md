@@ -6,7 +6,8 @@
 
 云盘上传客户端伴侣程序 — 让网页端拥有本地大文件分片上传能力
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](#-license)
+[![Stars](https://img.shields.io/github/stars/kobaw23214/clouddrive-companion?style=social)](https://github.com/kobaw23214/clouddrive-companion/stargazers)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Go](https://img.shields.io/badge/Go-1.21+-00ADD8?logo=go&logoColor=white)](https://go.dev)
 [![Vue](https://img.shields.io/badge/Vue-3-4FC08D?logo=vuedotjs&logoColor=white)](https://vuejs.org)
 [![Wails](https://img.shields.io/badge/Wails-v2-ff69b4?logo=data:image/svg+xml;base64,&labelColor=grey)](https://wails.io)
@@ -205,7 +206,9 @@ my-clouddrive://open-client?server=https://backend.example.com:8443
 
 ## 📝 License
 
-MIT License
+MIT — 详见 [LICENSE](LICENSE)
+
+> 如果这个工具帮到了你,欢迎点一个 ⭐ Star 让更多人看到
 
 ## 📬 联系我 / Contact
 
